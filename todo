@@ -1,0 +1,16 @@
+Lexer
+- double buffering
+- identifiers / nos
+- dispatch table
+- load kw in table
+- raw indexing
+
+
+    Colon, Semicolon,
+    ParenOpen, ParenClose,
+    BracketOpen, BracketClose,
+    CurlyOpen, CurlyClose,
+    RArrow, RArrowSquig, Squig,
+    Plus, Minus, Mult, Div, Mod,
+
+    FlgType(StaticTyp), FlgAsg, FlgTrait(Vec<StaticTyp>), FlgMut, 
