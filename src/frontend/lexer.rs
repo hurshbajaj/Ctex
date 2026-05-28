@@ -1,4 +1,4 @@
-use crate::frontend::tokens::{Token, TokenTyp};
+use crate::frontend::tokens::{DirectiveTyp, Token, TokenTyp};
 use memmap2::{Mmap, MmapOptions};
 use std::fs::File;
 use std::collections::HashMap;
@@ -34,30 +34,28 @@ pub fn DT_numeric(lexer: &mut Lexer) {
     unsafe{
         let mut num = String::new();
         let mut is_float = false;
-        while ( lexer.peek(0) >= b'1' && lexer.peek(0) <= b'9' ) || lexer.peek(0) == b',' || lexer.peek(0) == b'.' {
-            if lexer.peek(0) != b',' {
-                if lexer.peek(0) == b'.' {is_float = !is_float; if is_float == false{panic!("[Lexer] Multiple decimal points within a float not allowed!")}}
-                num.push(lexer.peek(0) as char); 
+        while matches!(lexer.peek(0), b'0'..=b'9' | b',' | b'.') {
+            let tmp = lexer.advance(1);
+            if tmp != b',' {
+                if tmp == b'.' {is_float = !is_float; if is_float == false{panic!("[Lexer] Multiple decimal points within a float not allowed!")}}
+                num.push(tmp as char); 
             }
-            lexer.advance(1);
         }
-        lexer.loc.0 += num.len();
+        if matches!(num.chars().next().unwrap_or(' '), ',' | '.') || matches!(num.chars().next_back().unwrap_or(' '), ',' | '.'){
+            panic!("[Lexer] Leading/trailing commas/decimals not allowed!")
+        }
         lexer.tokStream.push(Token{typ: if is_float {TokenTyp::Float(num.parse().unwrap())} else {TokenTyp::Integer(num.parse().unwrap())},loc: lexer.loc});
+        lexer.loc.0 += num.len();
     }
 }
 
 pub fn DT_identifier(lexer: &mut Lexer) { unsafe{
      let mut identifier = String::new();
-     if matches!(lexer.peek(0), b'a'..=b'z' | b'A'..=b'Z' | b'_' ) {
-         identifier.push(lexer.peek(0) as char);
-        lexer.advance(1);
-        while matches!(lexer.peek(0), b'a'..=b'z' | b'A'..=b'Z' | b'_' | b'0'..=b'9') {
-            identifier.push(lexer.peek(0) as char);        
-            lexer.advance(1);
-        }
+     identifier.push(lexer.advance(1) as char);
+     while matches!(lexer.peek(0), b'a'..=b'z' | b'A'..=b'Z' | b'_' | b'0'..=b'9') {
+         identifier.push(lexer.advance(1) as char);        
      }
 
-     lexer.loc.0 += identifier.len();
      if let Some(value) = lexer.idents.get(&identifier) {
          lexer.tokStream.push(Token {
              loc: lexer.loc,
@@ -71,17 +69,14 @@ pub fn DT_identifier(lexer: &mut Lexer) { unsafe{
              typ: TokenTyp::Identifier(lexer.idents_n),
          });
      }
+     lexer.loc.0 += identifier.len();
 }}
 
 pub fn DT_register(lexer: &mut Lexer) { unsafe{
      let mut register = String::new();
-     if matches!(lexer.peek(0), b'%') {
-        register.push(lexer.peek(0) as char);
-        lexer.advance(1);
-        while matches!(lexer.peek(0), b'a'..=b'z' | b'A'..=b'Z' | b'_' | b'0'..=b'9') {
-            register.push(lexer.peek(0) as char);        
-            lexer.advance(1);
-        }
+     register.push(lexer.advance(1) as char);
+     while matches!(lexer.peek(0), b'a'..=b'z' | b'A'..=b'Z' | b'_' | b'0'..=b'9') {
+         register.push(lexer.advance(1) as char);        
      }
 
      lexer.loc.0 += register.len();
@@ -130,6 +125,205 @@ pub fn DT_let(lexer: &mut Lexer) {
     lexer.tokStream.push(Token{loc: lexer.loc, typ: TokenTyp::KwLet});
 }
 
+pub fn DT_colon(lexer: &mut Lexer) {
+    if lexer.peek(1) == b':' {
+        lexer.advance(2);
+        lexer.loc.0 += 2;
+        lexer.tokStream.push(Token{loc: lexer.loc, typ: TokenTyp::AccessColon});
+    } else {
+        lexer.advance(1);
+        lexer.loc.0 += 1;
+        lexer.tokStream.push(Token{loc: lexer.loc, typ: TokenTyp::Colon});
+    }
+}
+
+pub fn DT_semi_colon(lexer: &mut Lexer) {
+    lexer.advance(1);
+    lexer.loc.0 += 1;
+    lexer.tokStream.push(Token{loc: lexer.loc, typ: TokenTyp::Semicolon});
+}
+
+pub fn DT_curly_open(lexer: &mut Lexer) {
+    lexer.advance(1);
+    lexer.loc.0 += 1;
+    lexer.tokStream.push(Token{loc: lexer.loc, typ: TokenTyp::CurlyOpen});
+}
+
+pub fn DT_curly_close(lexer: &mut Lexer) {
+    lexer.advance(1);
+    lexer.loc.0 += 1;
+    lexer.tokStream.push(Token{loc: lexer.loc, typ: TokenTyp::CurlyClose});
+}
+
+pub fn DT_paren_open(lexer: &mut Lexer) {
+    lexer.advance(1);
+    lexer.loc.0 += 1;
+    lexer.tokStream.push(Token{loc: lexer.loc, typ: TokenTyp::ParenOpen});
+}
+
+pub fn DT_paren_close(lexer: &mut Lexer) {
+    lexer.advance(1);
+    lexer.loc.0 += 1;
+    lexer.tokStream.push(Token{loc: lexer.loc, typ: TokenTyp::ParenClose});
+}
+
+pub fn DT_bracket_open(lexer: &mut Lexer) {
+    lexer.advance(1);
+    lexer.loc.0 += 1;
+    lexer.tokStream.push(Token{loc: lexer.loc, typ: TokenTyp::BracketOpen});
+}
+
+pub fn DT_bracket_close(lexer: &mut Lexer) {
+    lexer.advance(1);
+    lexer.loc.0 += 1;
+    lexer.tokStream.push(Token{loc: lexer.loc, typ: TokenTyp::BracketClose});
+}
+
+pub fn DT_wild(lexer: &mut Lexer) {
+    lexer.advance(1);
+    lexer.loc.0 += 1;
+    lexer.tokStream.push(Token{loc: lexer.loc, typ: TokenTyp::Wild});
+}
+
+pub fn DT_plus (lexer: &mut Lexer) {
+    lexer.advance(1);
+    lexer.loc.0 += 1;
+    lexer.tokStream.push(Token{loc: lexer.loc, typ: TokenTyp::Plus});
+}
+
+pub fn DT_mult(lexer: &mut Lexer) {
+    lexer.advance(1);
+    lexer.loc.0 += 1;
+    lexer.tokStream.push(Token{loc: lexer.loc, typ: TokenTyp::Mult});
+}
+
+pub fn DT_div(lexer: &mut Lexer) {
+    lexer.advance(1);
+    lexer.loc.0 += 1;
+    lexer.tokStream.push(Token{loc: lexer.loc, typ: TokenTyp::Div});
+}
+
+pub fn DT_minus(lexer: &mut Lexer) {
+    if lexer.peek(1) != b'>' {
+        lexer.advance(1);
+        lexer.loc.0 += 1;
+        lexer.tokStream.push(Token{loc: lexer.loc, typ: TokenTyp::Minus});
+    }else{
+        lexer.advance(2);
+        lexer.loc.0 += 2;
+        lexer.tokStream.push(Token{loc: lexer.loc, typ: TokenTyp::RArrow});
+    }
+}
+
+pub fn DT_squig(lexer: &mut Lexer) {
+    if lexer.peek(1) == b'>' {
+        lexer.advance(2);
+        lexer.loc.0 += 2;
+        lexer.tokStream.push(Token{loc: lexer.loc, typ: TokenTyp::RArrowSquig});
+    }else if lexer.peek(1) == b'%' {
+        lexer.advance(1);
+        lexer.loc.0 += 1;
+        lexer.tokStream.push(Token{loc: lexer.loc, typ: TokenTyp::Squig});
+    } else {
+        let mut string = String::new();
+        string.push(lexer.advance(1) as char);
+        while matches!(lexer.peek(0), b'a'..=b'z' | b'A'..=b'Z' | b'_' | b'0'..=b'9') {
+            string.push(lexer.advance(1) as char);        
+        }
+
+        lexer.loc.0 += string.len();
+        if let Some(value) = lexer.idents.get(&string) {
+            lexer.tokStream.push(Token {
+                loc: lexer.loc,
+                typ: value.clone(),
+            });
+        } else {
+            lexer.idents_n += 1;
+            lexer.idents.insert(string.clone(), TokenTyp::Identifier(lexer.idents_n));
+            lexer.tokStream.push(Token {
+                loc: lexer.loc,
+                typ: TokenTyp::MetaString(string),
+            });
+        }
+    }
+}
+
+pub fn DT_directive(lexer: &mut Lexer) {
+     let mut register = String::new();
+     register.push(lexer.advance(1) as char);        
+     while matches!(lexer.peek(0), b'a'..=b'z' | b'A'..=b'Z' | b'_' | b'0'..=b'9') {
+            register.push(lexer.advance(1) as char);        
+     }
+
+     lexer.loc.0 += register.len();
+     let value = lexer.idents.get(&register).expect("[Lexer] Unrecognized Compiler Directive!"); 
+
+     lexer.tokStream.push(Token {
+         loc: lexer.loc,
+         typ: value.clone(),
+     });
+}
+
+pub fn DT_flag(lexer: &mut Lexer) {
+    lexer.advance(1);
+    let mut key = String::new();
+
+    if matches!(lexer.peek(0), b'a'..=b'z' | b'A'..=b'Z' | b'_' | b'0'..=b'9') {
+        while matches!(lexer.peek(0), b'a'..=b'z' | b'A'..=b'Z' | b'_' | b'0'..=b'9') {
+            key.push(lexer.advance(1) as char);        
+        }
+        if lexer.peek(0) != b':' {
+            lexer.tokStream.push(Token {
+                loc: lexer.loc,
+                typ: TokenTyp::Leq,
+            });
+            lexer.loc.0 += 1;
+
+            if let Some(value) = lexer.idents.get(&key) {
+                lexer.tokStream.push(Token {
+                    loc: lexer.loc,
+                    typ: value.clone(),
+                });
+            } else {
+                lexer.idents_n += 1;
+                lexer.idents.insert(key.clone(), TokenTyp::Identifier(lexer.idents_n));
+                lexer.tokStream.push(Token {
+                    loc: lexer.loc,
+                    typ: TokenTyp::Identifier(lexer.idents_n),
+                });
+            }
+
+            lexer.loc.0 += key.len();
+
+        }else if lexer.peek(1) == b'1' {
+            lexer.tokStream.push(Token {
+                loc: lexer.loc,
+                typ: TokenTyp::Leq,
+            });
+            lexer.loc.0 += 1;
+
+            if let Some(value) = lexer.idents.get(&key) {
+                lexer.tokStream.push(Token {
+                    loc: lexer.loc,
+                    typ: value.clone(),
+                });
+            } else {
+                lexer.idents_n += 1;
+                lexer.idents.insert(key.clone(), TokenTyp::Identifier(lexer.idents_n));
+                lexer.tokStream.push(Token {
+                    loc: lexer.loc,
+                    typ: TokenTyp::Identifier(lexer.idents_n),
+                });
+            }
+
+            lexer.loc.0 += key.len();
+
+        } else {
+//flag
+        }
+    }
+}   
+
 impl Lexer {
     pub fn new(file: String) -> Self {
         let buf_n = 4096;
@@ -154,6 +348,12 @@ impl Lexer {
                 ("if".to_string(), TokenTyp::KwIf),
                 ("$".to_string(), TokenTyp::KwLet),
                 ("nul".to_string(), TokenTyp::KwNul),
+                ("mod".to_string(), TokenTyp::Mod),
+                ("@use".to_string(), TokenTyp::Directive(DirectiveTyp::Use)),
+                ("@from".to_string(), TokenTyp::Directive(DirectiveTyp::From)),
+                ("@import".to_string(), TokenTyp::Directive(DirectiveTyp::Import)),
+                ("@defer".to_string(), TokenTyp::Directive(DirectiveTyp::Defer)),
+                ("@type_cast".to_string(), TokenTyp::Directive(DirectiveTyp::TypCast)),
                 ("..".to_string(), TokenTyp::KwBlank),
             ]),
             idents_n: 0,
@@ -181,7 +381,8 @@ impl Lexer {
             *(self.i.add(peek_by))
         }
     }}
-    pub fn advance(&mut self, adv_by: usize){unsafe{
+    pub fn advance(&mut self, adv_by: usize) -> u8 {unsafe{
+        let out = *(self.i);
         if self.i.add(adv_by) < self.mmap[self.mmap_active as usize].as_ptr().add(self.buf_n){
             self.i = self.i.add(adv_by);
         } else {
@@ -193,9 +394,15 @@ impl Lexer {
             self.mmap_active = (self.mmap_active + 1) % 2;
 
         }
+        out
     }}
     pub fn lex(&self) {
 
     }
 }
 
+//fix loc
+//flags
+//dt
+//
+//main loop -> file at < file_end

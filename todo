@@ -13,4 +13,9 @@ Lexer
     RArrow, RArrowSquig, Squig,
     Plus, Minus, Mult, Div, Mod,
 
+    Directive,
+    MetaString(String),
+    AccessColon,
+    Wild,
+
     FlgType(StaticTyp), FlgAsg, FlgTrait(Vec<StaticTyp>), FlgMut, 
