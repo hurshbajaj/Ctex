@@ -1,4 +1,4 @@
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum StaticTyp {
     Str,
     U8, U16, U32, U64, U128,
@@ -7,15 +7,7 @@ pub enum StaticTyp {
     Def(String)
 }
 
-#[derive(Clone)]
-pub enum FlgTyp {
-    Typ(StaticTyp),
-    Trait(Vec<String>),
-    Asg,
-    Mut
-}
-
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum DirectiveTyp {
     Use,
     From,
@@ -24,16 +16,17 @@ pub enum DirectiveTyp {
     Defer
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum TokenTyp {
     KwLet, KwIf, KwNul, KwBlank,
     Identifier(usize),
     Register(usize),
     Integer(usize),
     Float(f64),
+    String(String),
 
     Ptr,
-    Colon, Semicolon,
+    Colon, Comma, Semicolon,
     ParenOpen, ParenClose,
     BracketOpen, BracketClose,
     CurlyOpen, CurlyClose,
@@ -45,11 +38,13 @@ pub enum TokenTyp {
     MetaString(String),
     AccessColon,
     Wild,
-    Geq, Leq, Eq, Neq,
+    Question,
+    Geq, Leq, Ge, Le, Eq, Neq,
 
-    Flg(FlgTyp)
+    StaticTyp(StaticTyp)
 }
 
+#[derive(Debug)]
 pub struct Token {
     pub typ: TokenTyp,
     pub loc: (usize, usize)

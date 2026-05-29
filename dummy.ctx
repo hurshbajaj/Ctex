@@ -1,0 +1,141 @@
+@use ~std;
+@from "/lib" "*.ctx" ;
+@import "lib.ctx";
+
+@type_cast ~string {
+	
+	<type: func(u_8)> {
+		..
+	};
+
+	<type: func(bool)> {
+		..
+	};
+}
+
+$ some_enum <asg> <type:enum> {..}
+
+$ register_initialization <type:INIT> {
+	%ictx_F <asg> <type:std::IO> std::IO::protobuf>
+	%ictx_T <asg> <type:struct> {
+		some_input_field: some_enum;
+	}
+
+	%octx_F <asg> <type:std::IO> std::IO::protobuf>;
+	%octx_T <asg> <type:struct> {..}; 
+
+	%core_signature -> "core14367";
+
+	//compiler directive
+	@defer ~collapse { 
+		%ictx_F; 
+		%ictx_T; 
+		%octx_F; 
+		%octx_T;
+		%core_signature;
+	} 
+}
+$ main <type:ENTRY> {
+	// comments exist!
+	/* cool! */
+
+	$ my_new_variable <asg> <type: uint_8> 4;
+	$ my_new_variable -> 7;
+
+	%octx.some_key -> ..;
+
+	$ my_struct <asg> <type:struct> <trait: [my_trait; my_second_trait]> 
+	<struct> {
+		property: uint_64;
+	};
+	$ my_trait <asg> <type:trait(nul)> {
+		return %self.property;
+	};
+	$ my_second_trait <asg> <type:trait(nul)> {
+		return %self.property;
+	};
+
+	$ my_trait_unclaimed <type:trait(nul)>;
+
+	$ my_object <asg> <type:my_struct*> <mutable> <object> {
+		property: 1,025 ;
+	};
+
+	$ %register1 <asg> <type:b8> <mutable> 44;
+	$ %register2 <asg> <type:b8> <mutable> 16;
+
+	%argv ~> [my_func().conv().check()]; //shorthand for &[..]
+	std::printf();
+
+	std::printf (conv_int(14; std::data_types::string).check() + 2); //shorthand, automatically sets argv
+																	 //same be done with enums
+
+	$ my_enum <asg> <type:enum> {
+		SUCCESS( *(%argv[0]) ), 
+		FAILURE,
+	};
+
+	$ my_array <asg> <type:array(uint_8; 2)> [1; 1];
+	$ my_vector <asg> <type: vec(uint_8)> 1::7::[];
+
+	$ my_type <asg> <type> array(uint_8; 2);
+	$ my_array <asg> <type:my_type*> [2; 2];
+
+	$ second_arr <asg> <type:tuple(uint_8; 3)> (1; 2; 3);
+	
+	$ my_ptr <asg> <type:ptr> &my_object; 
+
+	if my_arr = second_arr {..}
+
+	$ my_enum_value <asg> <type:my_enum*::<string>> my_enum::FAILURE;
+	$ unwrapp_example <asg> <type:string> my_enum_value.unwrap_to( my_enum(string)::SUCCESS).check();
+	$ (x, y) <asg> <type:tuple(uint_8; 2)> some_random_tuple_value;
+
+	match my_enum_value {
+		SUCCESS(_string) => {},
+		FAILURE => {}
+	}
+
+	match .. {
+		(x, y) => {},
+	}
+
+	match .. {
+		hl::ll => {},
+		? => {}
+	}
+
+	<scope> { //or <type:scope> 
+		..
+	}
+
+	//"type:" may be ommitted from flags elsewhere as well
+
+	~ %register1;
+};
+
+$ my_func <asg> <type:func(Result(b8))> { 
+	//without specifying the type in front of enum, it uses what's already there
+	return std::Result::Ok(%register1 + %register2); 
+};
+
+/*
+	A special command,
+	ctexc eval file.ctx --context
+
+	returns an object, from the host language's type system, with all the variables marked by <exposed>
+
+	The normal command to run would be,
+	ctexc exec file.ctx --context
+*/
+
+
+/*
+	Reserved Regsters,
+	ictx_T; ictx_F; octx_T; octx_F; (expect to be declared and populated before running ENTRY)
+	ctx;
+	argv; 
+	self;
+	expected_typ_core71465; //for storing expected type
+*/
+
