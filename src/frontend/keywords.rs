@@ -10,7 +10,7 @@ pub fn lookup_keyword(word: &str) -> Option<TokenTyp> {
         "$" => Some(TokenTyp::KwLet),
         "nul" => Some(TokenTyp::KwNul),
         "trait" => Some(TokenTyp::KwTrait),
-        "mod" => Some(TokenTyp::Mod),
+        "mod" => Some(TokenTyp::KwMod),
         ".." => Some(TokenTyp::KwBlank),
         "string" => Some(TokenTyp::StaticTyp(StaticTyp::Str)),
         "u8" => Some(TokenTyp::StaticTyp(StaticTyp::U8)),

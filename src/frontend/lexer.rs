@@ -186,6 +186,61 @@ impl Lexer {
         word
     }
 
+    fn intern_with(&mut self, word: String, make: impl FnOnce(usize) -> TokenTyp) -> TokenTyp {
+        if let Some(t) = self.idents.get(&word) {
+            return t.clone();
+        }
+        self.idents_n += 1;
+        let t = make(self.idents_n);
+        self.idents.insert(word, t.clone());
+        t
+    }
+
+    unsafe fn advance_bytes_one_col(&mut self, n: usize) {
+        if n == 0 {
+            return;
+        }
+        let first = self.peek(0);
+        if self.linear {
+            self.pos += n;
+            self.i = self.i.add(n);
+        } else {
+            self.pos += n;
+            self.sync_cursor();
+        }
+        if first == b'\n' {
+            self.row += 1;
+            self.col = 0;
+        } else {
+            self.col += 1;
+        }
+    }
+
+    unsafe fn eat_utf8_scalar(&mut self) -> String {
+        let ahead = self.bytes_ahead().min(4);
+        if ahead == 0 {
+            return String::new();
+        }
+        let mut buf = [0u8; 4];
+        for j in 0..ahead {
+            buf[j] = self.peek(j);
+        }
+        match std::str::from_utf8(&buf[..ahead]) {
+            Ok(s) => {
+                let n = s.chars().next().map(|c| c.len_utf8()).unwrap_or(1);
+                let ch: String = s.chars().take(1).collect();
+                self.advance_bytes_one_col(n);
+                ch
+            }
+            Err(e) => {
+                let n = e.valid_up_to().max(1).min(ahead);
+                let ch = String::from_utf8_lossy(&buf[..n]).into_owned();
+                self.advance_bytes_one_col(n);
+                ch
+            }
+        }
+    }
+
     unsafe fn scan_whitespace_run(&mut self) -> usize {
         let mut total = 0usize;
         loop {
@@ -215,14 +270,27 @@ impl Lexer {
     }
 }
 
-pub fn DT_default(lexer: &mut Lexer) {
+pub fn DT_unknown(lexer: &mut Lexer) {
+    let col_start = lexer.col;
     unsafe {
-        panic!(
-            "[Lexer] [{}:{}] Unrecognized character {:?}",
-            lexer.row,
-            lexer.col,
-            *lexer.i as char
-        );
+        lexer.advance_n(1);
+    }
+    lexer.push_at(TokenTyp::Unknown, col_start);
+}
+
+pub fn DT_unicode(lexer: &mut Lexer) {
+    unsafe {
+        let col_start = lexer.col;
+        let row = lexer.row;
+        let word = lexer.eat_utf8_scalar();
+        if word.is_empty() {
+            return;
+        }
+        let typ = lexer.intern_with(word, TokenTyp::InvalidIdent);
+        lexer.tokStream.push(Token {
+            typ,
+            loc: (row, (col_start, col_start + 1)),
+        });
     }
 }
 
@@ -246,39 +314,43 @@ pub fn DT_numeric(lexer: &mut Lexer) {
         let col_start = lexer.col;
         let mut num = String::new();
         let mut is_float = false;
-        while matches!(lexer.peek(0), b'0'..=b'9' | b',' | b'.') {
-            let b = lexer.advance(1);
-            lexer.bump_byte(b);
-            if b == b',' {
-                continue;
-            }
-            if b == b'.' {
-                is_float = !is_float;
-                if !is_float {
-                    panic!(
-                        "[Lexer] [{}:{}] Multiple decimal points within a float not allowed!",
-                        lexer.row,
-                        lexer.col
-                    );
-                }
-                num.push('.');
-            } else {
+        loop {
+            let b = lexer.peek(0);
+            if b.is_ascii_digit() {
+                let b = lexer.advance(1);
+                lexer.bump_byte(b);
                 num.push(b as char);
+            } else if b == b',' || b == b'.' {
+                if lexer.peek(1).is_ascii_digit() {
+                    if b == b'.' {
+                        is_float = true;
+                        let b = lexer.advance(1);
+                        lexer.bump_byte(b);
+                        num.push('.');
+                    } else {
+                        let b = lexer.advance(1);
+                        lexer.bump_byte(b);
+                    }
+                } else {
+                    break;
+                }
+            } else {
+                break;
             }
         }
-        if matches!(num.chars().next(), Some(',') | Some('.'))
-            || matches!(num.chars().next_back(), Some(',') | Some('.'))
-        {
-            panic!(
-                "[Lexer] [{}:{}] Leading/trailing commas/decimals not allowed!",
-                lexer.row,
-                lexer.col
-            );
+        if num.is_empty() {
+            return;
         }
         let typ = if is_float {
-            TokenTyp::Float(num.parse().unwrap())
+            match num.parse::<f64>() {
+                Ok(v) => TokenTyp::Float(v),
+                Err(_) => TokenTyp::Unknown,
+            }
         } else {
-            TokenTyp::Integer(num.parse().unwrap())
+            match num.parse::<usize>() {
+                Ok(v) => TokenTyp::Integer(v),
+                Err(_) => TokenTyp::Unknown,
+            }
         };
         lexer.push_at(typ, col_start);
     }
@@ -481,15 +553,13 @@ pub fn DT_div(lexer: &mut Lexer) {
             }
         }
     } else if lexer.peek(1) == b'*' {
+        let col_start = lexer.col;
         unsafe {
             lexer.advance_n(2);
             loop {
                 if lexer.at_eof() {
-                    panic!(
-                        "[Lexer] [{}:{}] Unclosed multiline comment!",
-                        lexer.row,
-                        lexer.col
-                    );
+                    lexer.push_at(TokenTyp::UnterminatedMultilineComment, col_start);
+                    return;
                 }
                 if lexer.peek(0) == b'*' && lexer.peek(1) == b'/' {
                     lexer.advance_n(2);
@@ -562,13 +632,10 @@ pub fn DT_directive(lexer: &mut Lexer) {
         lexer.bump_byte(b);
         let tail = lexer.scan_ident_word();
         let word = format!("@{tail}");
-        let typ = lookup_directive(&word).unwrap_or_else(|| {
-            panic!(
-                "[Lexer] [{}:{}] Unrecognized Compiler Directive!",
-                lexer.row,
-                lexer.col
-            );
-        });
+        let typ = match lookup_directive(&word) {
+            Some(t) => t,
+            None => lexer.intern_with(word, TokenTyp::UnrecognizedCompilerDirective),
+        };
         lexer.push_at(typ, col_start);
     }
 }
@@ -620,19 +687,19 @@ pub fn DT_eq(lexer: &mut Lexer) {
     }
 }
 
-pub fn DT_neq(lexer: &mut Lexer) {
-    if lexer.peek(1) != b'=' {
-        panic!(
-            "[Lexer] [{}:{}] Unrecognized (!) token!",
-            lexer.row,
-            lexer.col
-        );
-    }
+pub fn DT_bang(lexer: &mut Lexer) {
     let col_start = lexer.col;
-    unsafe {
-        lexer.advance_n(2);
+    if lexer.peek(1) == b'=' {
+        unsafe {
+            lexer.advance_n(2);
+        }
+        lexer.push_at(TokenTyp::Neq, col_start);
+    } else {
+        unsafe {
+            lexer.advance_n(1);
+        }
+        lexer.push_at(TokenTyp::Bang, col_start);
     }
-    lexer.push_at(TokenTyp::Neq, col_start);
 }
 
 pub fn DT_str(lexer: &mut Lexer) {
@@ -647,11 +714,8 @@ pub fn DT_str(lexer: &mut Lexer) {
             s.push(c as char);
         }
         if lexer.peek(0) != b'"' {
-            panic!(
-                "[Lexer] [{}:{}] Unterminated string literal",
-                lexer.row,
-                lexer.col
-            );
+            lexer.push_at(TokenTyp::UnterminatedString, col_start);
+            return;
         }
         let b = lexer.advance(1);
         lexer.bump_byte(b);
@@ -716,7 +780,10 @@ impl Lexer {
             idents: HashMap::new(),
             idents_n: 0,
             dispatch_table: {
-                let mut dt = [DT_default as DT_Handler; 256];
+                let mut dt = [DT_unknown as DT_Handler; 256];
+                for b in 128u8..=255 {
+                    dt[b as usize] = DT_unicode;
+                }
                 for c in b'0'..=b'9' {
                     dt[c as usize] = DT_numeric;
                 }
@@ -753,7 +820,7 @@ impl Lexer {
                 dt['<' as usize] = DT_le;
                 dt['>' as usize] = DT_ge;
                 dt['=' as usize] = DT_eq;
-                dt['!' as usize] = DT_neq;
+                dt['!' as usize] = DT_bang;
                 dt['"' as usize] = DT_str;
                 dt
             },
