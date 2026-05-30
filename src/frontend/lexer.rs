@@ -7,6 +7,8 @@ use std::fs::File;
 
 pub struct Lexer {
     pub mmap: [Mmap; 2],
+    /// File offset where each mmap slot begins.
+    chunk_off: [usize; 2],
     pub file: File,
     pub file_at: usize,
     pub buf_n: usize,
@@ -26,6 +28,66 @@ pub struct Lexer {
 type DT_Handler = fn(&mut Lexer);
 
 impl Lexer {
+    fn chunk_slot_for_pos(&self, pos: usize) -> Option<usize> {
+        for slot in 0..2 {
+            let off = self.chunk_off[slot];
+            let len = self.mmap[slot].len();
+            if len > 0 && pos >= off && pos < off + len {
+                return Some(slot);
+            }
+        }
+        None
+    }
+
+    unsafe fn sync_cursor(&mut self) {
+        if self.linear {
+            self.i = self.mmap[0].as_ptr().add(self.pos);
+            self.mmap_active = 0;
+            return;
+        }
+        if self.at_eof() {
+            return;
+        }
+        while self.chunk_slot_for_pos(self.pos).is_none() && self.file_at < self.file_len {
+            self.load_next_chunk();
+        }
+        if self.at_eof() {
+            return;
+        }
+        let slot = self
+            .chunk_slot_for_pos(self.pos)
+            .expect("[Lexer] cursor position is not mapped");
+        self.mmap_active = slot as u8;
+        self.i = self
+            .mmap[slot]
+            .as_ptr()
+            .add(self.pos - self.chunk_off[slot]);
+    }
+
+    unsafe fn load_next_chunk(&mut self) {
+        let end0 = self.chunk_off[0] + self.mmap[0].len();
+        let end1 = self.chunk_off[1] + self.mmap[1].len();
+        let slot = if end0 <= end1 { 0 } else { 1 };
+        let remap_len = (self.file_len - self.file_at).min(self.buf_n);
+        if remap_len == 0 {
+            return;
+        }
+        self.mmap[slot] = MmapOptions::new()
+            .offset(self.file_at as u64)
+            .len(remap_len)
+            .map(&self.file)
+            .unwrap();
+        self.chunk_off[slot] = self.file_at;
+        self.file_at += remap_len;
+    }
+
+    unsafe fn ensure_mapped(&mut self) {
+        if self.linear {
+            return;
+        }
+        self.sync_cursor();
+    }
+
     fn bytes_ahead(&self) -> usize {
         self.file_len.saturating_sub(self.pos)
     }
@@ -57,59 +119,10 @@ impl Lexer {
         if self.linear {
             return self.file_len - self.pos;
         }
-        let active = self.mmap_active as usize;
-        let start = self.mmap[active].as_ptr();
-        let end = start.add(self.mmap[active].len());
-        if self.i >= start && self.i < end {
-            return end.offset_from(self.i) as usize;
-        }
-        let inactive = (active + 1) % 2;
-        let start2 = self.mmap[inactive].as_ptr();
-        let end2 = start2.add(self.mmap[inactive].len());
-        if self.i >= start2 && self.i < end2 {
-            return end2.offset_from(self.i) as usize;
-        }
-        0
-    }
-
-    unsafe fn cross_to_inactive(&mut self) {
-        if self.file_len <= self.buf_n {
-            return;
-        }
-        let active = self.mmap_active as usize;
-        let chunk_end = self
-            .mmap[active]
-            .as_ptr()
-            .add(self.mmap[active].len());
-        if self.i != chunk_end {
-            return;
-        }
-        let inactive = (active + 1) % 2;
-        self.i = self.mmap[inactive].as_ptr();
-    }
-
-    unsafe fn remap_if_inactive_exhausted(&mut self) {
-        if self.file_len <= self.buf_n || self.file_at >= self.file_len {
-            return;
-        }
-        let active = self.mmap_active as usize;
-        let inactive = (active + 1) % 2;
-        let inactive_end = self.mmap[inactive].as_ptr().add(self.mmap[inactive].len());
-        if self.i < inactive_end {
-            return;
-        }
-        let remap_len = (self.file_len - self.file_at).min(self.buf_n);
-        if remap_len == 0 {
-            return;
-        }
-        self.mmap[active] = MmapOptions::new()
-            .offset(self.file_at as u64)
-            .len(remap_len)
-            .map(&self.file)
-            .unwrap();
-        self.file_at += remap_len;
-        self.mmap_active = inactive as u8;
-        self.i = self.mmap[inactive].as_ptr();
+        let Some(slot) = self.chunk_slot_for_pos(self.pos) else {
+            return 0;
+        };
+        self.chunk_off[slot] + self.mmap[slot].len() - self.pos
     }
 
     unsafe fn advance_by(&mut self, adv_by: usize) {
@@ -125,7 +138,7 @@ impl Lexer {
         }
         let mut remaining = adv_by;
         while remaining > 0 {
-            self.cross_to_inactive();
+            self.ensure_mapped();
             let step = self.contiguous_ahead().min(remaining);
             if step == 0 {
                 let b = self.advance(1);
@@ -136,9 +149,8 @@ impl Lexer {
             let slice = std::slice::from_raw_parts(self.i, step);
             simd::bump_loc(&mut self.row, &mut self.col, slice);
             self.pos += step;
-            self.i = self.i.add(step);
             remaining -= step;
-            self.remap_if_inactive_exhausted();
+            self.sync_cursor();
         }
     }
 
@@ -653,7 +665,7 @@ impl Lexer {
         let file = File::open(file.as_str()).expect("[Lexer] File not found!");
         let file_len = file.metadata().unwrap().len() as usize;
         let linear = file_len <= buf_n;
-        let (mmap, mmap_bg, file_at) = if linear {
+        let (mmap, mmap_bg, chunk_off, file_at) = if linear {
             let mmap = unsafe {
                 MmapOptions::new()
                     .len(file_len.max(1))
@@ -661,32 +673,38 @@ impl Lexer {
                     .unwrap()
             };
             let pad = unsafe { MmapOptions::new().len(1).map(&file).unwrap() };
-            (mmap, pad, file_len)
+            (mmap, pad, [0, 0], file_len)
         } else {
             let first_len = file_len.min(buf_n);
             let mmap = unsafe { MmapOptions::new().offset(0).len(first_len).map(&file).unwrap() };
-            let mmap_bg = unsafe {
-                if file_len > buf_n {
-                    let second_len = (file_len - buf_n).min(buf_n);
+            let (mmap_bg, second_off) = if file_len > buf_n {
+                let second_len = (file_len - buf_n).min(buf_n);
+                let bg = unsafe {
                     MmapOptions::new()
                         .offset(buf_n as u64)
                         .len(second_len)
                         .map(&file)
                         .unwrap()
-                } else {
+                };
+                (bg, buf_n)
+            } else {
+                let bg = unsafe {
                     MmapOptions::new()
                         .offset(0)
-                        .len(first_len.max(1))
+                        .len(1)
                         .map(&file)
                         .unwrap()
-                }
+                };
+                (bg, 0)
             };
-            (mmap, mmap_bg, first_len.min(file_len))
+            let loaded = first_len + if file_len > buf_n { mmap_bg.len() } else { 0 };
+            (mmap, mmap_bg, [0, second_off], loaded)
         };
         let i = mmap.as_ptr();
         Lexer {
             file,
             mmap: [mmap, mmap_bg],
+            chunk_off,
             buf_n,
             file_at,
             mmap_active: 0,
@@ -748,58 +766,42 @@ impl Lexer {
         self.pos >= self.file_len
     }
 
-    fn active_chunk_len(&self) -> usize {
-        self.mmap[self.mmap_active as usize].len()
-    }
-
-    pub fn peek(&self, peek_by: usize) -> u8 {
+    pub fn peek(&mut self, peek_by: usize) -> u8 {
         unsafe {
             if self.pos + peek_by >= self.file_len {
                 return 0;
             }
-            if self.linear {
-                return *self.i.add(peek_by);
+            if !self.linear {
+                self.ensure_mapped();
+                let p = self.pos + peek_by;
+                if self.chunk_slot_for_pos(p).is_none() {
+                    self.load_next_chunk();
+                    self.sync_cursor();
+                }
             }
-            let chunk_end = self.mmap[self.mmap_active as usize]
-                .as_ptr()
-                .add(self.active_chunk_len());
-            if self.i.add(peek_by) < chunk_end {
+            let p = self.pos + peek_by;
+            if self.linear {
                 *self.i.add(peek_by)
             } else {
-                let offset = self.i.add(peek_by).offset_from(chunk_end);
-                *self.mmap[((self.mmap_active + 1) % 2) as usize]
-                    .as_ptr()
-                    .add(offset as usize)
+                let slot = self
+                    .chunk_slot_for_pos(p)
+                    .expect("[Lexer] peek position is not mapped");
+                self.mmap[slot][p - self.chunk_off[slot]]
             }
         }
     }
 
     pub fn advance(&mut self, adv_by: usize) -> u8 {
         unsafe {
+            if !self.linear {
+                self.ensure_mapped();
+            }
             let out = *self.i;
             self.pos += adv_by;
             if self.linear {
                 self.i = self.i.add(adv_by);
-                return out;
-            }
-            let chunk_end = self.mmap[self.mmap_active as usize]
-                .as_ptr()
-                .add(self.active_chunk_len());
-            if self.i.add(adv_by) < chunk_end {
-                self.i = self.i.add(adv_by);
-            } else if self.file_len > self.buf_n {
-                let offset = self.i.add(adv_by).offset_from(chunk_end);
-                self.i = self.mmap[((self.mmap_active + 1) % 2) as usize]
-                    .as_ptr()
-                    .add(offset as usize);
-                let remap_len = (self.file_len - self.file_at).min(self.buf_n);
-                self.mmap[self.mmap_active as usize] = MmapOptions::new()
-                    .offset(self.file_at as u64)
-                    .len(remap_len)
-                    .map(&self.file)
-                    .unwrap();
-                self.file_at += remap_len;
-                self.mmap_active = (self.mmap_active + 1) % 2;
+            } else {
+                self.sync_cursor();
             }
             out
         }
@@ -808,6 +810,9 @@ impl Lexer {
     pub fn lex(&mut self) {
         while !self.at_eof() {
             unsafe {
+                if !self.linear {
+                    self.ensure_mapped();
+                }
                 let handler = self.dispatch_table[*self.i as usize];
                 handler(self);
             }
