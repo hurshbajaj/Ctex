@@ -83,7 +83,7 @@ $ main <type:ENTRY> {
 
 	$ second_arr <asg> <type:tuple(uint_8; 3)> (1; 2; 3);
 	
-	$ my_ptr <asg> <type:ptr> &my_object; 
+	$ my_ptr <asg> <type:usize> &my_object; 
 
 	if my_arr = second_arr {..}
 
@@ -128,7 +128,6 @@ $ my_func <asg> <type:func(Result(b8))> {
 	The normal command to run would be,
 	ctexc exec file.ctx --context
 */
-
 
 /*
 	Reserved Regsters,
