@@ -5,7 +5,7 @@ use std::time::Instant;
 mod frontend;
 
 fn main() {
-    let mut path = "dummy_large.ctx".to_string();
+    let mut path = "dummy.ctx".to_string();
     let mut dump = false;
     for arg in env::args().skip(1) {
         match arg.as_str() {

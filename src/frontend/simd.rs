@@ -113,6 +113,3 @@ pub unsafe fn scan_whitespace(ptr: *const u8, max: usize) -> usize {
     off
 }
 
-pub unsafe fn scan_meta_string(ptr: *const u8, max: usize) -> usize {
-    scan_ident(ptr, max)
-}

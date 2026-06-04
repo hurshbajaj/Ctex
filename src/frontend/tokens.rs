@@ -29,7 +29,7 @@ pub enum DirectiveTyp {
 }
 #[derive(Clone, Debug)]
 pub enum TokenTyp {
-    KwLet, KwIf, KwNul, KwBlank, KwWhile, KwMatch, KwMut, KwAsg, KwTrait,
+    KwLet, KwIf, KwNul, KwBlank, KwWhile, KwMatch, KwMut, KwAsg, KwTrait, KwMod,
     Identifier(usize),
     Register(usize),
     Integer(usize),
@@ -40,7 +40,7 @@ pub enum TokenTyp {
     ParenOpen, ParenClose,
     BracketOpen, BracketClose,
     CurlyOpen, CurlyClose,
-    Andp, RArrow, FatRArrow, RArrowSquig, Squig, //Squig -> Register Drop
+    Andp, RArrow, FatRArrow, RArrowSquig, Squig, 
     Plus, Minus, Mult, Div, Mod,
     Dot,
     Directive(DirectiveTyp),
@@ -48,8 +48,13 @@ pub enum TokenTyp {
     AccessColon,
     Wild,
     Question,
-    Geq, Leq, Ge, Le, Eq, Neq,
-    StaticTyp(StaticTyp)
+    Geq, Leq, Ge, Le, Eq, Neq, Bang,
+    StaticTyp(StaticTyp),
+    InvalidIdent(usize),
+    Unknown,
+    UnterminatedString,
+    UnterminatedMultilineComment,
+    UnrecognizedCompilerDirective(usize),
 }
 #[derive(Debug)]
 pub struct Token {
