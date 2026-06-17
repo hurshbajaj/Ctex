@@ -1,6 +1,6 @@
 use crate::frontend::keywords::{lookup_directive, lookup_keyword};
 use crate::frontend::simd;
-use crate::frontend::tokens::{Token, TokenTyp};
+use crate::frontend::tokens::{BinOp, Token, TokenTyp};
 use memmap2::{Mmap, MmapOptions};
 use std::collections::HashMap;
 use std::fs::File;
@@ -18,13 +18,12 @@ pub struct Lexer {
     pub tokStream: Vec<Token>,
     pub idents: HashMap<String, TokenTyp>,
     pub idents_n: usize,
-    pub dispatch_table: [DT_Handler; 256],
     file_len: usize,
     pos: usize,
     linear: bool,
+    pf_counter: u8,
+    pf: Option<usize>
 }
-
-type DT_Handler = fn(&mut Lexer);
 
 impl Lexer {
     fn chunk_slot_for_pos(&self, pos: usize) -> Option<usize> {
@@ -269,6 +268,7 @@ impl Lexer {
     }
 }
 
+#[inline]
 pub fn DT_unknown(lexer: &mut Lexer) {
     let col_start = lexer.col;
     unsafe {
@@ -277,6 +277,7 @@ pub fn DT_unknown(lexer: &mut Lexer) {
     lexer.push_at(TokenTyp::Unknown, col_start);
 }
 
+#[inline]
 pub fn DT_unicode(lexer: &mut Lexer) {
     unsafe {
         let col_start = lexer.col;
@@ -293,12 +294,14 @@ pub fn DT_unicode(lexer: &mut Lexer) {
     }
 }
 
+#[inline]
 pub fn DT_nl(lexer: &mut Lexer) {
     unsafe {
         lexer.advance_n(1);
     }
 }
 
+#[inline]
 pub fn DT_whitespace(lexer: &mut Lexer) {
     unsafe {
         let n = lexer.scan_whitespace_run();
@@ -308,6 +311,7 @@ pub fn DT_whitespace(lexer: &mut Lexer) {
     }
 }
 
+#[inline]
 pub fn DT_numeric(lexer: &mut Lexer) {
     unsafe {
         let col_start = lexer.col;
@@ -346,7 +350,7 @@ pub fn DT_numeric(lexer: &mut Lexer) {
                 Err(_) => TokenTyp::Unknown,
             }
         } else {
-            match num.parse::<usize>() {
+            match num.parse::<u128>() {
                 Ok(v) => TokenTyp::Integer(v),
                 Err(_) => TokenTyp::Unknown,
             }
@@ -355,6 +359,7 @@ pub fn DT_numeric(lexer: &mut Lexer) {
     }
 }
 
+#[inline]
 pub fn DT_identifier(lexer: &mut Lexer) {
     unsafe {
         let col_start = lexer.col;
@@ -373,6 +378,7 @@ pub fn DT_identifier(lexer: &mut Lexer) {
     }
 }
 
+#[inline]
 pub fn DT_register(lexer: &mut Lexer) {
     unsafe {
         let col_start = lexer.col;
@@ -392,6 +398,7 @@ pub fn DT_register(lexer: &mut Lexer) {
     }
 }
 
+#[inline]
 pub fn DT_ptr(lexer: &mut Lexer) {
     let col_start = lexer.col;
     unsafe {
@@ -400,14 +407,36 @@ pub fn DT_ptr(lexer: &mut Lexer) {
     lexer.push_at(TokenTyp::Ptr, col_start);
 }
 
-pub fn DT_andp(lexer: &mut Lexer) {
+#[inline]
+pub fn DT_or(lexer: &mut Lexer) {
     let col_start = lexer.col;
-    unsafe {
-        lexer.advance_n(1);
+    if lexer.peek(1) == b'|' {
+        unsafe {
+            lexer.advance_n(2);
+        }
+        lexer.push_at(TokenTyp::BinOp(BinOp::Or), col_start);
+    } else {
+        lexer.push_at(TokenTyp::Unknown, col_start);
     }
-    lexer.push_at(TokenTyp::Andp, col_start);
 }
 
+#[inline]
+pub fn DT_andp(lexer: &mut Lexer) {
+    let col_start = lexer.col;
+    if lexer.peek(1) == b'&' {
+        unsafe {
+            lexer.advance_n(2);
+        }
+        lexer.push_at(TokenTyp::BinOp(BinOp::And), col_start);
+    } else {
+        unsafe {
+            lexer.advance_n(1);
+        }
+        lexer.push_at(TokenTyp::Andp, col_start);
+    }
+}
+
+#[inline]
 pub fn DT_dot(lexer: &mut Lexer) {
     let col_start = lexer.col;
     if lexer.peek(1) != b'.' {
@@ -423,6 +452,7 @@ pub fn DT_dot(lexer: &mut Lexer) {
     }
 }
 
+#[inline]
 pub fn DT_let(lexer: &mut Lexer) {
     let col_start = lexer.col;
     unsafe {
@@ -431,6 +461,7 @@ pub fn DT_let(lexer: &mut Lexer) {
     lexer.push_at(TokenTyp::KwLet, col_start);
 }
 
+#[inline]
 pub fn DT_colon(lexer: &mut Lexer) {
     let col_start = lexer.col;
     if lexer.peek(1) == b':' {
@@ -439,6 +470,9 @@ pub fn DT_colon(lexer: &mut Lexer) {
         }
         lexer.push_at(TokenTyp::AccessColon, col_start);
     } else {
+        if lexer.pf_counter == 1 {
+            lexer.tokStream[lexer.pf.unwrap()] = Token{typ: TokenTyp::FlagBegin, loc: lexer.tokStream[lexer.pf.unwrap()].loc} 
+        }
         unsafe {
             lexer.advance_n(1);
         }
@@ -446,6 +480,7 @@ pub fn DT_colon(lexer: &mut Lexer) {
     }
 }
 
+#[inline]
 pub fn DT_semi_colon(lexer: &mut Lexer) {
     let col_start = lexer.col;
     unsafe {
@@ -454,6 +489,7 @@ pub fn DT_semi_colon(lexer: &mut Lexer) {
     lexer.push_at(TokenTyp::Semicolon, col_start);
 }
 
+#[inline]
 pub fn DT_comma(lexer: &mut Lexer) {
     let col_start = lexer.col;
     unsafe {
@@ -462,6 +498,7 @@ pub fn DT_comma(lexer: &mut Lexer) {
     lexer.push_at(TokenTyp::Comma, col_start);
 }
 
+#[inline]
 pub fn DT_curly_open(lexer: &mut Lexer) {
     let col_start = lexer.col;
     unsafe {
@@ -470,6 +507,7 @@ pub fn DT_curly_open(lexer: &mut Lexer) {
     lexer.push_at(TokenTyp::CurlyOpen, col_start);
 }
 
+#[inline]
 pub fn DT_curly_close(lexer: &mut Lexer) {
     let col_start = lexer.col;
     unsafe {
@@ -478,6 +516,7 @@ pub fn DT_curly_close(lexer: &mut Lexer) {
     lexer.push_at(TokenTyp::CurlyClose, col_start);
 }
 
+#[inline]
 pub fn DT_paren_open(lexer: &mut Lexer) {
     let col_start = lexer.col;
     unsafe {
@@ -486,6 +525,7 @@ pub fn DT_paren_open(lexer: &mut Lexer) {
     lexer.push_at(TokenTyp::ParenOpen, col_start);
 }
 
+#[inline]
 pub fn DT_paren_close(lexer: &mut Lexer) {
     let col_start = lexer.col;
     unsafe {
@@ -494,6 +534,7 @@ pub fn DT_paren_close(lexer: &mut Lexer) {
     lexer.push_at(TokenTyp::ParenClose, col_start);
 }
 
+#[inline]
 pub fn DT_bracket_open(lexer: &mut Lexer) {
     let col_start = lexer.col;
     unsafe {
@@ -502,6 +543,7 @@ pub fn DT_bracket_open(lexer: &mut Lexer) {
     lexer.push_at(TokenTyp::BracketOpen, col_start);
 }
 
+#[inline]
 pub fn DT_bracket_close(lexer: &mut Lexer) {
     let col_start = lexer.col;
     unsafe {
@@ -510,6 +552,7 @@ pub fn DT_bracket_close(lexer: &mut Lexer) {
     lexer.push_at(TokenTyp::BracketClose, col_start);
 }
 
+#[inline]
 pub fn DT_wild(lexer: &mut Lexer) {
     let col_start = lexer.col;
     unsafe {
@@ -518,30 +561,34 @@ pub fn DT_wild(lexer: &mut Lexer) {
     lexer.push_at(TokenTyp::Wild, col_start);
 }
 
+#[inline]
 pub fn DT_question(lexer: &mut Lexer) {
     let col_start = lexer.col;
     unsafe {
         lexer.advance_n(1);
     }
-    lexer.push_at(TokenTyp::Question, col_start);
+    lexer.push_at(TokenTyp::Wild, col_start);
 }
 
+#[inline]
 pub fn DT_plus(lexer: &mut Lexer) {
     let col_start = lexer.col;
     unsafe {
         lexer.advance_n(1);
     }
-    lexer.push_at(TokenTyp::Plus, col_start);
+    lexer.push_at(TokenTyp::BinOp(BinOp::Plus), col_start);
 }
 
+#[inline]
 pub fn DT_mult(lexer: &mut Lexer) {
     let col_start = lexer.col;
     unsafe {
         lexer.advance_n(1);
     }
-    lexer.push_at(TokenTyp::Mult, col_start);
+    lexer.push_at(TokenTyp::BinOp(BinOp::Mult), col_start);
 }
 
+#[inline]
 pub fn DT_div(lexer: &mut Lexer) {
     if lexer.peek(1) == b'/' {
         unsafe {
@@ -573,17 +620,18 @@ pub fn DT_div(lexer: &mut Lexer) {
         unsafe {
             lexer.advance_n(1);
         }
-        lexer.push_at(TokenTyp::Div, col_start);
+        lexer.push_at(TokenTyp::BinOp(BinOp::Div), col_start);
     }
 }
 
+#[inline]
 pub fn DT_minus(lexer: &mut Lexer) {
     let col_start = lexer.col;
     if lexer.peek(1) != b'>' {
         unsafe {
             lexer.advance_n(1);
         }
-        lexer.push_at(TokenTyp::Minus, col_start);
+        lexer.push_at(TokenTyp::BinOp(BinOp::Minus), col_start);
     } else {
         unsafe {
             lexer.advance_n(2);
@@ -592,6 +640,7 @@ pub fn DT_minus(lexer: &mut Lexer) {
     }
 }
 
+#[inline]
 pub fn DT_squig(lexer: &mut Lexer) {
     if lexer.peek(1) == b'>' {
         let col_start = lexer.col;
@@ -624,6 +673,7 @@ pub fn DT_squig(lexer: &mut Lexer) {
     }
 }
 
+#[inline]
 pub fn DT_directive(lexer: &mut Lexer) {
     unsafe {
         let col_start = lexer.col;
@@ -639,38 +689,48 @@ pub fn DT_directive(lexer: &mut Lexer) {
     }
 }
 
+#[inline]
 pub fn DT_leq(lexer: &mut Lexer) {
     let col_start = lexer.col;
     unsafe {
         lexer.advance_n(1);
     }
-    lexer.push_at(TokenTyp::Leq, col_start);
+    lexer.push_at(TokenTyp::BinOp(BinOp::Leq), col_start);
 }
 
+#[inline]
 pub fn DT_geq(lexer: &mut Lexer) {
     let col_start = lexer.col;
     unsafe {
         lexer.advance_n(1);
     }
-    lexer.push_at(TokenTyp::Geq, col_start);
+    lexer.push_at(TokenTyp::BinOp(BinOp::Geq), col_start);
 }
 
+#[inline]
 pub fn DT_le(lexer: &mut Lexer) {
+    lexer.pf_counter = 3;
+    lexer.pf = Some(lexer.tokStream.len());
     let col_start = lexer.col;
     unsafe {
         lexer.advance_n(1);
     }
-    lexer.push_at(TokenTyp::Le, col_start);
+    lexer.push_at(TokenTyp::BinOp(BinOp::Le), col_start);
 }
 
+#[inline]
 pub fn DT_ge(lexer: &mut Lexer) {
     let col_start = lexer.col;
     unsafe {
         lexer.advance_n(1);
     }
-    lexer.push_at(TokenTyp::Ge, col_start);
+    if lexer.pf_counter == 1 {
+        lexer.tokStream[lexer.pf.unwrap()] = Token{typ: TokenTyp::FlagBegin, loc: lexer.tokStream[lexer.pf.unwrap()].loc} 
+    }
+    lexer.push_at(TokenTyp::BinOp(BinOp::Ge), col_start);
 }
 
+#[inline]
 pub fn DT_eq(lexer: &mut Lexer) {
     let col_start = lexer.col;
     if lexer.peek(1) == b'>' {
@@ -682,17 +742,18 @@ pub fn DT_eq(lexer: &mut Lexer) {
         unsafe {
             lexer.advance_n(1);
         }
-        lexer.push_at(TokenTyp::Eq, col_start);
+        lexer.push_at(TokenTyp::BinOp(BinOp::Eq), col_start);
     }
 }
 
+#[inline]
 pub fn DT_bang(lexer: &mut Lexer) {
     let col_start = lexer.col;
     if lexer.peek(1) == b'=' {
         unsafe {
             lexer.advance_n(2);
         }
-        lexer.push_at(TokenTyp::Neq, col_start);
+        lexer.push_at(TokenTyp::BinOp(BinOp::Neq), col_start);
     } else {
         unsafe {
             lexer.advance_n(1);
@@ -701,6 +762,7 @@ pub fn DT_bang(lexer: &mut Lexer) {
     }
 }
 
+#[inline]
 pub fn DT_str(lexer: &mut Lexer) {
     unsafe {
         let col_start = lexer.col;
@@ -723,8 +785,7 @@ pub fn DT_str(lexer: &mut Lexer) {
 }
 
 impl Lexer {
-    pub fn new(file: String) -> Self {
-        let buf_n = 4096;
+    pub fn new(file: String, buf_n: usize) -> Self {
         let file = File::open(file.as_str()).expect("[Lexer] File not found!");
         let file_len = file.metadata().unwrap().len() as usize;
         let linear = file_len <= buf_n;
@@ -778,53 +839,10 @@ impl Lexer {
             tokStream: vec![],
             idents: HashMap::new(),
             idents_n: 0,
-            dispatch_table: {
-                let mut dt = [DT_unknown as DT_Handler; 256];
-                for b in 128u8..=255 {
-                    dt[b as usize] = DT_unicode;
-                }
-                for c in b'0'..=b'9' {
-                    dt[c as usize] = DT_numeric;
-                }
-                for c in (b'a'..=b'z').chain(b'A'..=b'Z').chain(b'_'..=b'_') {
-                    dt[c as usize] = DT_identifier;
-                }
-                for c in 9..=13 {
-                    dt[c] = DT_whitespace;
-                }
-                dt[' ' as usize] = DT_whitespace;
-                dt['\0' as usize] = DT_whitespace;
-                dt['\n' as usize] = DT_nl;
-                dt['*' as usize] = DT_ptr;
-                dt['&' as usize] = DT_andp;
-                dt['.' as usize] = DT_dot;
-                dt['$' as usize] = DT_let;
-                dt[':' as usize] = DT_colon;
-                dt[';' as usize] = DT_semi_colon;
-                dt[',' as usize] = DT_comma;
-                dt['{' as usize] = DT_curly_open;
-                dt['}' as usize] = DT_curly_close;
-                dt['(' as usize] = DT_paren_open;
-                dt[')' as usize] = DT_paren_close;
-                dt['[' as usize] = DT_bracket_open;
-                dt[']' as usize] = DT_bracket_close;
-                dt['_' as usize] = DT_wild;
-                dt['?' as usize] = DT_question;
-                dt['+' as usize] = DT_plus;
-                dt['-' as usize] = DT_minus;
-                dt['/' as usize] = DT_div;
-                dt['~' as usize] = DT_squig;
-                dt['%' as usize] = DT_register;
-                dt['@' as usize] = DT_directive;
-                dt['<' as usize] = DT_le;
-                dt['>' as usize] = DT_ge;
-                dt['=' as usize] = DT_eq;
-                dt['!' as usize] = DT_bang;
-                dt['"' as usize] = DT_str;
-                dt
-            },
             file_len,
             pos: 0,
+            pf: None,
+            pf_counter: 0
         }
     }
 
@@ -857,6 +875,7 @@ impl Lexer {
         }
     }
 
+
     pub fn advance(&mut self, adv_by: usize) -> u8 {
         unsafe {
             if !self.linear {
@@ -872,15 +891,63 @@ impl Lexer {
             out
         }
     }
-
     pub fn lex(&mut self) {
+        let mut cp = 0;
         while !self.at_eof() {
             unsafe {
                 if !self.linear {
                     self.ensure_mapped();
                 }
-                let handler = self.dispatch_table[*self.i as usize];
-                handler(self);
+
+                match *self.i {
+                    128u8..=255 => DT_unicode(self),
+
+                    b'0'..=b'9' => DT_numeric(self),
+
+                    b'\t' | b'\n' | b'\x0b' | b'\x0c' | b'\r' => DT_whitespace(self),
+
+                    b' ' => DT_whitespace(self),
+
+                    b'a'..=b'z'
+                        | b'A'..=b'Z'
+                        | b'_' => DT_identifier(self),
+
+                    b'*' => DT_ptr(self),
+                    b'&' => DT_andp(self),
+                    b'|' => DT_or(self),
+                    b'.' => DT_dot(self),
+                    b'$' => DT_let(self),
+                    b':' => DT_colon(self),
+                    b';' => DT_semi_colon(self),
+                    b',' => DT_comma(self),
+
+                    b'{' => DT_curly_open(self),
+                    b'}' => DT_curly_close(self),
+                    b'(' => DT_paren_open(self),
+                    b')' => DT_paren_close(self),
+                    b'[' => DT_bracket_open(self),
+                    b']' => DT_bracket_close(self),
+
+                    b'?' => DT_question(self),
+                    b'+' => DT_plus(self),
+                    b'-' => DT_minus(self),
+                    b'/' => DT_div(self),
+                    b'~' => DT_squig(self),
+                    b'%' => DT_register(self),
+                    b'@' => DT_directive(self),
+
+                    b'<' => DT_le(self),
+                    b'>' => DT_ge(self),
+                    b'=' => DT_eq(self),
+                    b'!' => DT_bang(self),
+
+                    b'"' => DT_str(self),
+
+                    _ => DT_unknown(self),
+                }
+
+                self.pf_counter = self.pf_counter.saturating_sub((self.tokStream.len() - cp) as u8);
+                cp = self.tokStream.len();
             }
         }
     }

@@ -27,12 +27,20 @@ pub enum DirectiveTyp {
     TypCast,
     Defer
 }
+
+#[derive(Clone, Debug)]
+pub enum BinOp {
+    Plus, Minus, Mult, Div, Mod,
+    Geq, Leq, Ge, Le, Eq, Neq, 
+    And, Or,
+}
+
 #[derive(Clone, Debug)]
 pub enum TokenTyp {
     KwLet, KwIf, KwNul, KwBlank, KwWhile, KwMatch, KwMut, KwAsg, KwTrait, KwMod,
     Identifier(usize),
     Register(usize),
-    Integer(usize),
+    Integer(u128),
     Float(f64),
     String(String),
     Ptr,
@@ -41,14 +49,14 @@ pub enum TokenTyp {
     BracketOpen, BracketClose,
     CurlyOpen, CurlyClose,
     Andp, RArrow, FatRArrow, RArrowSquig, Squig, 
-    Plus, Minus, Mult, Div, Mod,
+    BinOp(BinOp),
     Dot,
     Directive(DirectiveTyp),
     MetaString(String),
     AccessColon,
+    FlagBegin,
     Wild,
-    Question,
-    Geq, Leq, Ge, Le, Eq, Neq, Bang,
+    Bang,
     StaticTyp(StaticTyp),
     InvalidIdent(usize),
     Unknown,
