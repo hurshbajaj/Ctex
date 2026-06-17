@@ -25,7 +25,7 @@ fn ws_mask(v: u8x32) -> u32 {
     let nul = v.cmp_eq(u8x32::splat(0));
     let vt = v.cmp_eq(u8x32::splat(0x0b));
     let ff = v.cmp_eq(u8x32::splat(0x0c));
-    (sp | tab | lf | cr | nul | vt | ff).move_mask() as u32
+    (sp | tab | lf | cr | nul | vt | ff).move_mask() as u32 
 }
 
 fn newline_mask(v: u8x32) -> u32 {

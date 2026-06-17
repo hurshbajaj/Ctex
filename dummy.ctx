@@ -1,4 +1,3 @@
-😅test
 @use ~std;
 @from "/lib" "*.ctx" ;
 @import "lib.ctx";

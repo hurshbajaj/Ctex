@@ -1,11 +1,17 @@
 use crate::frontend::lexer::Lexer;
+use crate::frontend::ast::Parser;
 use std::env;
 use std::time::Instant;
 
 mod frontend;
 
 fn main() {
-    let mut path = "dummy.ctx".to_string();
+
+    // ======================
+    //         Sys
+    // ======================
+    
+    let mut path = "foc.ctx".to_string();
     let mut dump = false;
     for arg in env::args().skip(1) {
         match arg.as_str() {
@@ -17,15 +23,48 @@ fn main() {
             other => path = other.into(),
         }
     }
+
+    // ======================
+    //        Lexer
+    // ======================
+    
     let t0 = Instant::now();
-    let mut lexer = Lexer::new(path.clone());
+
+    let mut lexer = Lexer::new(path.clone(), 4096 * 2);
     lexer.lex();
-    let elapsed = t0.elapsed();
+
+    let elapsed0 = t0.elapsed();
     let n = lexer.tokStream.len();
-    println!("file: {path}");
-    println!("tokens: {n}");
-    println!("lex: {:.3?}", elapsed);
     if dump {
-        println!("{:?}", lexer.tokStream);
+        println!("\n----------------------------------------");
+        println!("Tok-Stream");
+        println!("----------------------------------------");
+        println!("file: {path}");
+        println!("tokens: {n}");
+        println!("lex: {:.3?}", elapsed0);
+        println!("----------------------------------------");
+        for token in &lexer.tokStream {
+            println!("{:?}", token);
+        }
+    }
+
+    // ======================
+    //         AST
+    // ======================
+
+    let t1 = Instant::now();
+
+    let mut Parser = Parser::new(lexer.tokStream.into_iter().peekable());
+    let ast = Parser.from_ast();
+
+    let elapsed1 = t1.elapsed();
+    println!("ast: {:.3?}", elapsed1);
+    if dump {
+        println!("\n----------------------------------------");
+        println!("Abstract Syntax Tree");
+        println!("----------------------------------------");
+        println!("ast: {:.3?}", elapsed1);
+        println!("----------------------------------------");
+        println!("{:#?}", ast);
     }
 }
