@@ -1,4 +1,4 @@
-use crate::frontend::tokens::{BinOp, Keyword, Token, TokenTyp};
+use crate::frontend::tokens::{BinOp, Flg, Keyword, Token, TokenTyp};
 use std::iter::Peekable;
 use std::marker::PhantomData;
 use std::vec::IntoIter;
@@ -28,11 +28,6 @@ pub enum CompilerDirective {
 pub enum DirectiveFlgOpts<'a> {
     Collapse,
     StaticType(TypExpr<'a>),
-}
-
-#[derive(Debug)]
-pub enum FlgOpts {
-    Mut,
 }
 
 #[derive(Debug)]
@@ -81,6 +76,7 @@ pub enum TypExpr<'a> {
     Bool,
     Vector,
     Func(Box<TypExpr<'a>>),
+    Trait(Box<TypExpr<'a>>),
     Usize,
     Isize,
 
@@ -136,11 +132,15 @@ pub enum Expr<'a> {
         head: Box<Expr<'a>>,
         tail: Box<Expr<'a>>,
     },
-    Array(Vec<Expr<'a>>),
+    Field {
+        parent: Box<Expr<'a>>,
+        field: Box<Expr<'a>>,
+    },
+    Array(Vec<Box<Expr<'a>>>),
     Decl {
         identifier: Box<PatternExpr<'a>>,
         value: Box<Expr<'a>>,
-        flags: Vec<FlgOpts>,
+        flags: Vec<Flg>,
         typ: TypExpr<'a>,
     },
     If {
@@ -153,7 +153,7 @@ pub enum Expr<'a> {
         arms: Vec<MatchArm<'a>>,
     },
 
-    Block(Vec<Box<Stmt<'a>>>),
+    Scope(Vec<Box<Stmt<'a>>>),
 }
 
 impl<'a> From<TokenTyp> for UnaryOp {
@@ -211,6 +211,54 @@ impl<'a> Parser<'a> {
     }
     fn parse_expr(&mut self, min_bp: u8) -> Box<Expr<'a>> {
         let mut lhs = match self.tokstream.peek() {
+            Some(Token {
+                typ: TokenTyp::BracketOpen,
+                ..
+            }) => {
+                self.tokstream.next();
+                let mut els = vec![];
+                loop {
+                    match self.tokstream.peek() {
+                        Some(Token {
+                            typ: TokenTyp::BracketClose,
+                            ..
+                        }) => {
+                            break;
+                        }
+                        _ => {
+                            els.push(self.parse_expr(22));
+                            match self.tokstream.peek() {
+                                Some(
+                                    Token {
+                                        typ: TokenTyp::Semicolon,
+                                        ..
+                                    },
+                                    ..,
+                                ) => {
+                                    self.tokstream.next();
+                                }
+                                Some(
+                                    Token {
+                                        typ: TokenTyp::BracketClose,
+                                        ..
+                                    },
+                                    ..,
+                                ) => {
+                                    break;
+                                }
+                                _ => panic!("Explicit"),
+                            }
+                        }
+                    }
+                }
+                Box::new(Expr::Array(els))
+            }
+            Some(Token {
+                typ: TokenTyp::CurlyOpen,
+                ..
+            }) => Box::new(Expr::Scope(
+                self.parse_block().unwrap_or_else(|_| panic!("Explicit")),
+            )),
             Some(Token {
                 typ: TokenTyp::Keyword(Keyword::If),
                 ..
@@ -292,6 +340,7 @@ impl<'a> Parser<'a> {
                         target: lhs,
                     });
                 }
+
                 Some(Token {
                     typ: TokenTyp::ParenOpen,
                     ..
@@ -362,6 +411,7 @@ impl<'a> Parser<'a> {
                     });
                     self.expect(TokenTyp::BracketClose, || panic!("Explicit"));
                 }
+
                 Some(Token {
                     typ: TokenTyp::AccessColon,
                     ..

@@ -72,7 +72,22 @@ pub enum Keyword {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub enum FlgSingle {
+    Asg,
+    Mutable,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Flg {
+    Single(FlgSingle),
+    Type,
+    Trait,
+    Invalid,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum TokenTyp {
+    Flag(Flg),
     Keyword(Keyword),
     Identifier(usize),
     Register(usize),

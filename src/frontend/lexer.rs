@@ -1,6 +1,7 @@
 use crate::frontend::keywords::{lookup_directive, lookup_keyword};
 use crate::frontend::simd;
-use crate::frontend::tokens::{BinOp, Keyword, Token, TokenTyp};
+use crate::frontend::tokens::TokenTyp::Identifier;
+use crate::frontend::tokens::{BinOp, Flg, FlgSingle, Keyword, Token, TokenTyp};
 use memmap2::{Mmap, MmapOptions};
 use std::collections::HashMap;
 use std::fs::File;
@@ -460,6 +461,28 @@ pub fn DT_let(lexer: &mut Lexer) {
     lexer.push_at(TokenTyp::Keyword(Keyword::Let), col_start);
 }
 
+pub fn pf_seq(lexer: &mut Lexer) {
+    lexer.tokStream[lexer.pf.unwrap()] = Token {
+        typ: TokenTyp::FlagBegin,
+        loc: lexer.tokStream[lexer.pf.unwrap()].loc,
+    };
+    lexer.tokStream[lexer.pf.unwrap() + 1] = Token {
+        typ: TokenTyp::Flag({
+            match lexer.tokStream[lexer.pf.unwrap() + 1].typ {
+                Identifier(n) => match n {
+                    0 => Flg::Single(FlgSingle::Asg),
+                    1 => Flg::Type,
+                    2 => Flg::Single(FlgSingle::Mutable),
+                    3 => Flg::Trait,
+                    _ => Flg::Invalid,
+                },
+                _ => Flg::Invalid,
+            }
+        }),
+        loc: lexer.tokStream[lexer.pf.unwrap() + 1].loc,
+    };
+}
+
 #[inline]
 pub fn DT_colon(lexer: &mut Lexer) {
     let col_start = lexer.col;
@@ -470,10 +493,7 @@ pub fn DT_colon(lexer: &mut Lexer) {
         lexer.push_at(TokenTyp::AccessColon, col_start);
     } else {
         if lexer.pf_counter == 1 {
-            lexer.tokStream[lexer.pf.unwrap()] = Token {
-                typ: TokenTyp::FlagBegin,
-                loc: lexer.tokStream[lexer.pf.unwrap()].loc,
-            }
+            pf_seq(lexer);
         }
         unsafe {
             lexer.advance_n(1);
@@ -692,47 +712,40 @@ pub fn DT_directive(lexer: &mut Lexer) {
 }
 
 #[inline]
-pub fn DT_leq(lexer: &mut Lexer) {
-    let col_start = lexer.col;
-    unsafe {
-        lexer.advance_n(1);
-    }
-    lexer.push_at(TokenTyp::BinOp(BinOp::Leq), col_start);
-}
-
-#[inline]
-pub fn DT_geq(lexer: &mut Lexer) {
-    let col_start = lexer.col;
-    unsafe {
-        lexer.advance_n(1);
-    }
-    lexer.push_at(TokenTyp::BinOp(BinOp::Geq), col_start);
-}
-
-#[inline]
 pub fn DT_le(lexer: &mut Lexer) {
-    lexer.pf_counter = 3;
-    lexer.pf = Some(lexer.tokStream.len());
     let col_start = lexer.col;
-    unsafe {
-        lexer.advance_n(1);
+    if lexer.peek(1) == b'=' {
+        unsafe {
+            lexer.advance_n(2);
+        }
+        lexer.push_at(TokenTyp::BinOp(BinOp::Leq), col_start);
+    } else {
+        lexer.pf_counter = 3;
+        lexer.pf = Some(lexer.tokStream.len());
+        unsafe {
+            lexer.advance_n(1);
+        }
+        lexer.push_at(TokenTyp::BinOp(BinOp::Lt), col_start);
     }
-    lexer.push_at(TokenTyp::BinOp(BinOp::Lt), col_start);
 }
 
 #[inline]
 pub fn DT_ge(lexer: &mut Lexer) {
     let col_start = lexer.col;
-    unsafe {
-        lexer.advance_n(1);
-    }
-    if lexer.pf_counter == 1 {
-        lexer.tokStream[lexer.pf.unwrap()] = Token {
-            typ: TokenTyp::FlagBegin,
-            loc: lexer.tokStream[lexer.pf.unwrap()].loc,
+    if lexer.peek(1) == b'=' {
+        unsafe {
+            lexer.advance_n(2);
         }
+        lexer.push_at(TokenTyp::BinOp(BinOp::Geq), col_start);
+    } else {
+        unsafe {
+            lexer.advance_n(1);
+        }
+        if lexer.pf_counter == 1 {
+            pf_seq(lexer);
+        }
+        lexer.push_at(TokenTyp::BinOp(BinOp::Gt), col_start);
     }
-    lexer.push_at(TokenTyp::BinOp(BinOp::Gt), col_start);
 }
 
 #[inline]
@@ -837,7 +850,12 @@ impl Lexer {
             row: 0,
             col: 0,
             tokStream: vec![],
-            idents: HashMap::new(),
+            idents: HashMap::from([
+                ("asg".to_string(), TokenTyp::Identifier(0)),
+                ("type".to_string(), TokenTyp::Identifier(1)),
+                ("mutable".to_string(), TokenTyp::Identifier(2)),
+                ("trait".to_string(), TokenTyp::Identifier(3)),
+            ]),
             idents_n: 0,
             file_len,
             pos: 0,

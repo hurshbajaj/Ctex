@@ -26,6 +26,8 @@ pub fn lookup_keyword(word: &str) -> Option<TokenTyp> {
         "i32" => Some(TokenTyp::StaticTyp(StaticTyp::I32)),
         "i64" => Some(TokenTyp::StaticTyp(StaticTyp::I64)),
         "i128" => Some(TokenTyp::StaticTyp(StaticTyp::I128)),
+        "f32" => Some(TokenTyp::StaticTyp(StaticTyp::F32)),
+        "f64" => Some(TokenTyp::StaticTyp(StaticTyp::F64)),
         "array" => Some(TokenTyp::StaticTyp(StaticTyp::Array)),
         "tuple" => Some(TokenTyp::StaticTyp(StaticTyp::Tuple)),
         "enum" => Some(TokenTyp::StaticTyp(StaticTyp::Enum)),
