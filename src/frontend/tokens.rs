@@ -1,4 +1,4 @@
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum StaticTyp {
     Str,
     U8, U16, U32, U64, U128,
@@ -19,7 +19,7 @@ pub enum StaticTyp {
     Isize,
     Def(String)
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum DirectiveTyp {
     Use,
     From,
@@ -28,31 +28,30 @@ pub enum DirectiveTyp {
     Defer
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum BinOp {
     Plus, Minus, Mult, Div, Mod,
-    Geq, Leq, Ge, Le, Eq, Neq, 
+    Geq, Leq, Gt, Lt, Eq, Neq, 
     And, Or,
+    Index
 }
 
-#[derive(Clone, Debug)]
-pub enum TokenTyp {
-    KwLet, KwIf, KwNul, KwBlank, KwWhile, KwMatch, KwMut, KwAsg, KwTrait, KwMod,
+#[derive(Clone, Debug, PartialEq)]
+pub enum TokenTyp <'a> {
+    KwLet, KwIf, KwNul, KwBlank, KwWhile, KwMatch, KwMut, KwAsg, KwTrait,
     Identifier(usize),
     Register(usize),
     Integer(u128),
     Float(f64),
-    String(String),
-    Ptr,
+    String(&'a str),
     Colon, Comma, Semicolon,
     ParenOpen, ParenClose,
     BracketOpen, BracketClose,
     CurlyOpen, CurlyClose,
     Andp, RArrow, FatRArrow, RArrowSquig, Squig, 
     BinOp(BinOp),
-    Dot,
     Directive(DirectiveTyp),
-    MetaString(String),
+    MetaString(&'a str),
     AccessColon,
     FlagBegin,
     Wild,
@@ -65,7 +64,7 @@ pub enum TokenTyp {
     UnrecognizedCompilerDirective(usize),
 }
 #[derive(Debug)]
-pub struct Token {
-    pub typ: TokenTyp,
+pub struct Token <'a> {
+    pub typ: TokenTyp<'a>,
     pub loc: (usize, (usize, usize))
 }

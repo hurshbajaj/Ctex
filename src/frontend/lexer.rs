@@ -5,7 +5,7 @@ use memmap2::{Mmap, MmapOptions};
 use std::collections::HashMap;
 use std::fs::File;
 
-pub struct Lexer {
+pub struct Lexer <'a> {
     pub mmap: [Mmap; 2],
     chunk_off: [usize; 2],
     pub file: File,
@@ -15,8 +15,8 @@ pub struct Lexer {
     pub i: *const u8,
     pub row: usize,
     pub col: usize,
-    pub tokStream: Vec<Token>,
-    pub idents: HashMap<String, TokenTyp>,
+    pub tokStream: Vec<Token<'a>>,
+    pub idents: HashMap<&'a str, TokenTyp<'a>>,
     pub idents_n: usize,
     file_len: usize,
     pos: usize,
@@ -25,7 +25,7 @@ pub struct Lexer {
     pf: Option<usize>
 }
 
-impl Lexer {
+impl <'a> Lexer <'a> {
     fn chunk_slot_for_pos(&self, pos: usize) -> Option<usize> {
         for slot in 0..2 {
             let off = self.chunk_off[slot];
@@ -99,7 +99,7 @@ impl Lexer {
         }
     }
 
-    fn push_at(&mut self, typ: TokenTyp, col_start: usize) {
+    fn push_at(&mut self, typ: TokenTyp<'a>, col_start: usize) {
         self.tokStream.push(Token {
             typ,
             loc: (self.row, (col_start, self.col)),
@@ -184,7 +184,7 @@ impl Lexer {
         word
     }
 
-    fn intern_with(&mut self, word: String, make: impl FnOnce(usize) -> TokenTyp) -> TokenTyp {
+    fn intern_with(&mut self, word: String, make: impl FnOnce(usize) -> TokenTyp<'a>) -> TokenTyp<'a> {
         if let Some(t) = self.idents.get(&word) {
             return t.clone();
         }
@@ -404,7 +404,7 @@ pub fn DT_ptr(lexer: &mut Lexer) {
     unsafe {
         lexer.advance_n(1);
     }
-    lexer.push_at(TokenTyp::Ptr, col_start);
+    lexer.push_at(TokenTyp::BinOp(BinOp::Mult), col_start);
 }
 
 #[inline]
@@ -443,7 +443,7 @@ pub fn DT_dot(lexer: &mut Lexer) {
         unsafe {
             lexer.advance_n(1);
         }
-        lexer.push_at(TokenTyp::Dot, col_start);
+        lexer.push_at(TokenTyp::BinOp(BinOp::Index), col_start);
     } else {
         unsafe {
             lexer.advance_n(2);
@@ -715,7 +715,7 @@ pub fn DT_le(lexer: &mut Lexer) {
     unsafe {
         lexer.advance_n(1);
     }
-    lexer.push_at(TokenTyp::BinOp(BinOp::Le), col_start);
+    lexer.push_at(TokenTyp::BinOp(BinOp::Lt), col_start);
 }
 
 #[inline]
@@ -727,7 +727,7 @@ pub fn DT_ge(lexer: &mut Lexer) {
     if lexer.pf_counter == 1 {
         lexer.tokStream[lexer.pf.unwrap()] = Token{typ: TokenTyp::FlagBegin, loc: lexer.tokStream[lexer.pf.unwrap()].loc} 
     }
-    lexer.push_at(TokenTyp::BinOp(BinOp::Ge), col_start);
+    lexer.push_at(TokenTyp::BinOp(BinOp::Gt), col_start);
 }
 
 #[inline]
@@ -780,11 +780,11 @@ pub fn DT_str(lexer: &mut Lexer) {
         }
         let b = lexer.advance(1);
         lexer.bump_byte(b);
-        lexer.push_at(TokenTyp::String(s), col_start);
+        lexer.push_at(TokenTyp::String(s.as_str()), col_start);
     }
 }
 
-impl Lexer {
+impl<'a> Lexer<'a> {
     pub fn new(file: String, buf_n: usize) -> Self {
         let file = File::open(file.as_str()).expect("[Lexer] File not found!");
         let file_len = file.metadata().unwrap().len() as usize;

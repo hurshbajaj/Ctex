@@ -1,4 +1,4 @@
-use crate::frontend::tokens::{DirectiveTyp, StaticTyp, TokenTyp};
+use crate::frontend::tokens::{DirectiveTyp, StaticTyp, TokenTyp, BinOp};
 
 pub fn lookup_keyword(word: &str) -> Option<TokenTyp> {
     match word {
@@ -10,7 +10,7 @@ pub fn lookup_keyword(word: &str) -> Option<TokenTyp> {
         "$" => Some(TokenTyp::KwLet),
         "nul" => Some(TokenTyp::KwNul),
         "trait" => Some(TokenTyp::KwTrait),
-        "mod" => Some(TokenTyp::KwMod),
+        "mod" => Some(TokenTyp::BinOp(BinOp::Mod)),
         ".." => Some(TokenTyp::KwBlank),
         "string" => Some(TokenTyp::StaticTyp(StaticTyp::Str)),
         "u8" => Some(TokenTyp::StaticTyp(StaticTyp::U8)),
