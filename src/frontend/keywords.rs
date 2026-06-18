@@ -1,17 +1,20 @@
-use crate::frontend::tokens::{DirectiveTyp, StaticTyp, TokenTyp, BinOp};
+use crate::frontend::tokens::{BinOp, DirectiveTyp, Keyword, StaticTyp, TokenTyp};
 
 pub fn lookup_keyword(word: &str) -> Option<TokenTyp> {
     match word {
-        "if" => Some(TokenTyp::KwIf),
-        "while" => Some(TokenTyp::KwWhile),
-        "match" => Some(TokenTyp::KwMatch),
-        "mutable" => Some(TokenTyp::KwMut),
-        "asg" => Some(TokenTyp::KwAsg),
-        "$" => Some(TokenTyp::KwLet),
-        "nul" => Some(TokenTyp::KwNul),
-        "trait" => Some(TokenTyp::KwTrait),
+        "if" => Some(TokenTyp::Keyword(Keyword::If)),
+        "else" => Some(TokenTyp::Keyword(Keyword::Else)),
+        "true" => Some(TokenTyp::Keyword(Keyword::True)),
+        "false" => Some(TokenTyp::Keyword(Keyword::False)),
+        "while" => Some(TokenTyp::Keyword(Keyword::While)),
+        "match" => Some(TokenTyp::Keyword(Keyword::Match)),
+        "mutable" => Some(TokenTyp::Keyword(Keyword::Mut)),
+        "asg" => Some(TokenTyp::Keyword(Keyword::Asg)),
+        "$" => Some(TokenTyp::Keyword(Keyword::Let)),
+        "nul" => Some(TokenTyp::Keyword(Keyword::Nul)),
+        "trait" => Some(TokenTyp::Keyword(Keyword::Trait)),
         "mod" => Some(TokenTyp::BinOp(BinOp::Mod)),
-        ".." => Some(TokenTyp::KwBlank),
+        ".." => Some(TokenTyp::Keyword(Keyword::Blank)),
         "string" => Some(TokenTyp::StaticTyp(StaticTyp::Str)),
         "u8" => Some(TokenTyp::StaticTyp(StaticTyp::U8)),
         "u16" => Some(TokenTyp::StaticTyp(StaticTyp::U16)),
@@ -50,4 +53,3 @@ pub fn lookup_directive(word: &str) -> Option<TokenTyp> {
         _ => None,
     }
 }
-

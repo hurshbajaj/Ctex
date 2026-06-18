@@ -1,9 +1,18 @@
 #[derive(Clone, Debug, PartialEq)]
 pub enum StaticTyp {
     Str,
-    U8, U16, U32, U64, U128,
-    I8, I16, I32, I64, I128,
-    F32, F64,
+    U8,
+    U16,
+    U32,
+    U64,
+    U128,
+    I8,
+    I16,
+    I32,
+    I64,
+    I128,
+    F32,
+    F64,
     Array,
     Tuple,
     Enum,
@@ -17,7 +26,7 @@ pub enum StaticTyp {
     Func,
     Usize,
     Isize,
-    Def(String)
+    Def(String),
 }
 #[derive(Clone, Debug, PartialEq)]
 pub enum DirectiveTyp {
@@ -25,33 +34,68 @@ pub enum DirectiveTyp {
     From,
     Import,
     TypCast,
-    Defer
+    Defer,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum BinOp {
-    Plus, Minus, Mult, Div, Mod,
-    Geq, Leq, Gt, Lt, Eq, Neq, 
-    And, Or,
-    Index
+    Plus,
+    Minus,
+    Mult,
+    Div,
+    Mod,
+    Geq,
+    Leq,
+    Gt,
+    Lt,
+    Eq,
+    Neq,
+    And,
+    Or,
+    Index,
+}
+
+#[derive(Clone, Debug, PartialEq, Copy)]
+pub enum Keyword {
+    Let,
+    If,
+    Else,
+    True,
+    False,
+    Nul,
+    Blank,
+    While,
+    Match,
+    Mut,
+    Asg,
+    Trait,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum TokenTyp <'a> {
-    KwLet, KwIf, KwNul, KwBlank, KwWhile, KwMatch, KwMut, KwAsg, KwTrait,
+pub enum TokenTyp {
+    Keyword(Keyword),
     Identifier(usize),
     Register(usize),
     Integer(u128),
     Float(f64),
-    String(&'a str),
-    Colon, Comma, Semicolon,
-    ParenOpen, ParenClose,
-    BracketOpen, BracketClose,
-    CurlyOpen, CurlyClose,
-    Andp, RArrow, FatRArrow, RArrowSquig, Squig, 
+    String(String),
+    Colon,
+    Comma,
+    Semicolon,
+    ParenOpen,
+    ParenClose,
+    BracketOpen,
+    BracketClose,
+    CurlyOpen,
+    CurlyClose,
+    Andp,
+    RArrow,
+    FatRArrow,
+    RArrowSquig,
+    Squig,
     BinOp(BinOp),
     Directive(DirectiveTyp),
-    MetaString(&'a str),
+    MetaString(String),
     AccessColon,
     FlagBegin,
     Wild,
@@ -64,7 +108,7 @@ pub enum TokenTyp <'a> {
     UnrecognizedCompilerDirective(usize),
 }
 #[derive(Debug)]
-pub struct Token <'a> {
-    pub typ: TokenTyp<'a>,
-    pub loc: (usize, (usize, usize))
+pub struct Token {
+    pub typ: TokenTyp,
+    pub loc: (usize, (usize, usize)),
 }

@@ -1,11 +1,11 @@
 use crate::frontend::keywords::{lookup_directive, lookup_keyword};
 use crate::frontend::simd;
-use crate::frontend::tokens::{BinOp, Token, TokenTyp};
+use crate::frontend::tokens::{BinOp, Keyword, Token, TokenTyp};
 use memmap2::{Mmap, MmapOptions};
 use std::collections::HashMap;
 use std::fs::File;
 
-pub struct Lexer <'a> {
+pub struct Lexer {
     pub mmap: [Mmap; 2],
     chunk_off: [usize; 2],
     pub file: File,
@@ -15,17 +15,17 @@ pub struct Lexer <'a> {
     pub i: *const u8,
     pub row: usize,
     pub col: usize,
-    pub tokStream: Vec<Token<'a>>,
-    pub idents: HashMap<&'a str, TokenTyp<'a>>,
+    pub tokStream: Vec<Token>,
+    pub idents: HashMap<String, TokenTyp>,
     pub idents_n: usize,
     file_len: usize,
     pos: usize,
     linear: bool,
     pf_counter: u8,
-    pf: Option<usize>
+    pf: Option<usize>,
 }
 
-impl <'a> Lexer <'a> {
+impl Lexer {
     fn chunk_slot_for_pos(&self, pos: usize) -> Option<usize> {
         for slot in 0..2 {
             let off = self.chunk_off[slot];
@@ -56,8 +56,7 @@ impl <'a> Lexer <'a> {
             .chunk_slot_for_pos(self.pos)
             .expect("[Lexer] cursor position is not mapped");
         self.mmap_active = slot as u8;
-        self.i = self
-            .mmap[slot]
+        self.i = self.mmap[slot]
             .as_ptr()
             .add(self.pos - self.chunk_off[slot]);
     }
@@ -99,7 +98,7 @@ impl <'a> Lexer <'a> {
         }
     }
 
-    fn push_at(&mut self, typ: TokenTyp<'a>, col_start: usize) {
+    fn push_at(&mut self, typ: TokenTyp, col_start: usize) {
         self.tokStream.push(Token {
             typ,
             loc: (self.row, (col_start, self.col)),
@@ -184,7 +183,7 @@ impl <'a> Lexer <'a> {
         word
     }
 
-    fn intern_with(&mut self, word: String, make: impl FnOnce(usize) -> TokenTyp<'a>) -> TokenTyp<'a> {
+    fn intern_with(&mut self, word: String, make: impl FnOnce(usize) -> TokenTyp) -> TokenTyp {
         if let Some(t) = self.idents.get(&word) {
             return t.clone();
         }
@@ -448,7 +447,7 @@ pub fn DT_dot(lexer: &mut Lexer) {
         unsafe {
             lexer.advance_n(2);
         }
-        lexer.push_at(TokenTyp::KwBlank, col_start);
+        lexer.push_at(TokenTyp::Keyword(Keyword::Blank), col_start);
     }
 }
 
@@ -458,7 +457,7 @@ pub fn DT_let(lexer: &mut Lexer) {
     unsafe {
         lexer.advance_n(1);
     }
-    lexer.push_at(TokenTyp::KwLet, col_start);
+    lexer.push_at(TokenTyp::Keyword(Keyword::Let), col_start);
 }
 
 #[inline]
@@ -471,7 +470,10 @@ pub fn DT_colon(lexer: &mut Lexer) {
         lexer.push_at(TokenTyp::AccessColon, col_start);
     } else {
         if lexer.pf_counter == 1 {
-            lexer.tokStream[lexer.pf.unwrap()] = Token{typ: TokenTyp::FlagBegin, loc: lexer.tokStream[lexer.pf.unwrap()].loc} 
+            lexer.tokStream[lexer.pf.unwrap()] = Token {
+                typ: TokenTyp::FlagBegin,
+                loc: lexer.tokStream[lexer.pf.unwrap()].loc,
+            }
         }
         unsafe {
             lexer.advance_n(1);
@@ -725,7 +727,10 @@ pub fn DT_ge(lexer: &mut Lexer) {
         lexer.advance_n(1);
     }
     if lexer.pf_counter == 1 {
-        lexer.tokStream[lexer.pf.unwrap()] = Token{typ: TokenTyp::FlagBegin, loc: lexer.tokStream[lexer.pf.unwrap()].loc} 
+        lexer.tokStream[lexer.pf.unwrap()] = Token {
+            typ: TokenTyp::FlagBegin,
+            loc: lexer.tokStream[lexer.pf.unwrap()].loc,
+        }
     }
     lexer.push_at(TokenTyp::BinOp(BinOp::Gt), col_start);
 }
@@ -780,27 +785,28 @@ pub fn DT_str(lexer: &mut Lexer) {
         }
         let b = lexer.advance(1);
         lexer.bump_byte(b);
-        lexer.push_at(TokenTyp::String(s.as_str()), col_start);
+        lexer.push_at(TokenTyp::String(s), col_start);
     }
 }
 
-impl<'a> Lexer<'a> {
+impl Lexer {
     pub fn new(file: String, buf_n: usize) -> Self {
         let file = File::open(file.as_str()).expect("[Lexer] File not found!");
         let file_len = file.metadata().unwrap().len() as usize;
         let linear = file_len <= buf_n;
         let (mmap, mmap_bg, chunk_off, file_at) = if linear {
-            let mmap = unsafe {
-                MmapOptions::new()
-                    .len(file_len.max(1))
-                    .map(&file)
-                    .unwrap()
-            };
+            let mmap = unsafe { MmapOptions::new().len(file_len.max(1)).map(&file).unwrap() };
             let pad = unsafe { MmapOptions::new().len(1).map(&file).unwrap() };
             (mmap, pad, [0, 0], file_len)
         } else {
             let first_len = file_len.min(buf_n);
-            let mmap = unsafe { MmapOptions::new().offset(0).len(first_len).map(&file).unwrap() };
+            let mmap = unsafe {
+                MmapOptions::new()
+                    .offset(0)
+                    .len(first_len)
+                    .map(&file)
+                    .unwrap()
+            };
             let (mmap_bg, second_off) = if file_len > buf_n {
                 let second_len = (file_len - buf_n).min(buf_n);
                 let bg = unsafe {
@@ -812,13 +818,7 @@ impl<'a> Lexer<'a> {
                 };
                 (bg, buf_n)
             } else {
-                let bg = unsafe {
-                    MmapOptions::new()
-                        .offset(0)
-                        .len(1)
-                        .map(&file)
-                        .unwrap()
-                };
+                let bg = unsafe { MmapOptions::new().offset(0).len(1).map(&file).unwrap() };
                 (bg, 0)
             };
             let loaded = first_len + if file_len > buf_n { mmap_bg.len() } else { 0 };
@@ -842,7 +842,7 @@ impl<'a> Lexer<'a> {
             file_len,
             pos: 0,
             pf: None,
-            pf_counter: 0
+            pf_counter: 0,
         }
     }
 
@@ -874,7 +874,6 @@ impl<'a> Lexer<'a> {
             }
         }
     }
-
 
     pub fn advance(&mut self, adv_by: usize) -> u8 {
         unsafe {
@@ -908,9 +907,7 @@ impl<'a> Lexer<'a> {
 
                     b' ' => DT_whitespace(self),
 
-                    b'a'..=b'z'
-                        | b'A'..=b'Z'
-                        | b'_' => DT_identifier(self),
+                    b'a'..=b'z' | b'A'..=b'Z' | b'_' => DT_identifier(self),
 
                     b'*' => DT_ptr(self),
                     b'&' => DT_andp(self),
@@ -946,7 +943,9 @@ impl<'a> Lexer<'a> {
                     _ => DT_unknown(self),
                 }
 
-                self.pf_counter = self.pf_counter.saturating_sub((self.tokStream.len() - cp) as u8);
+                self.pf_counter = self
+                    .pf_counter
+                    .saturating_sub((self.tokStream.len() - cp) as u8);
                 cp = self.tokStream.len();
             }
         }
