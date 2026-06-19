@@ -74,7 +74,7 @@ pub struct MatchArm<'a> {
 pub enum Expr<'a> {
     Keyword(Keyword),
     TypeExpr(StaticTyp),
-    String(String),
+    String(Box<str>),
     Integer(u128),
     Float(f64),
     Var(usize),
@@ -186,7 +186,9 @@ impl<'a> Parser<'a> {
                 ..
             }) => {
                 self.tokstream.next();
-                let target = self.parse_expr(0).unwrap_or_else(|_| panic!("Explicit"));
+                let target = self
+                    .parse_pattern_expr()
+                    .unwrap_or_else(|_| panic!("Explicit"));
                 let mut flags = vec![];
                 let mut flags_pl = vec![];
                 loop {
@@ -584,7 +586,19 @@ impl<'a> Parser<'a> {
                 self.tokstream.next();
                 Ok(Box::new(Expr::Keyword(x)))
             }
+            Some(&Token {
+                typ: TokenTyp::StaticTyp(x),
+                ..
+            }) => {
+                self.tokstream.next();
+                Ok(Box::new(Expr::TypeExpr(x)))
+            }
             _ => Err(()),
+        }
+    }
+    fn parse_pattern_expr(&mut self) -> Result<Box<PatternExpr<'a>>, ()> {
+        match self.tokstream.peek() {
+            _ => Ok(Box::new(PatternExpr::Expr(self.parse_expr(0)?))),
         }
     }
 }

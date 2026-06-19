@@ -684,12 +684,13 @@ pub fn DT_squig(lexer: &mut Lexer) {
             let b = lexer.advance(1);
             lexer.bump_byte(b);
             let word = lexer.scan_ident_word();
+            let word_ = word.clone();
             let typ = if let Some(t) = lexer.idents.get(&word) {
                 t.clone()
             } else {
                 lexer.idents_n += 1;
-                let t = TokenTyp::MetaString(word.clone());
-                lexer.idents.insert(word, t.clone());
+                let t = TokenTyp::MetaString(word.into_boxed_str());
+                lexer.idents.insert(word_, t.clone());
                 t
             };
             lexer.push_at(typ, col_start);
@@ -802,7 +803,7 @@ pub fn DT_str(lexer: &mut Lexer) {
         }
         let b = lexer.advance(1);
         lexer.bump_byte(b);
-        lexer.push_at(TokenTyp::String(s), col_start);
+        lexer.push_at(TokenTyp::String(s.into_boxed_str()), col_start);
     }
 }
 

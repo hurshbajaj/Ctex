@@ -1,4 +1,4 @@
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Copy)]
 pub enum StaticTyp {
     Str,
     U8,
@@ -27,7 +27,7 @@ pub enum StaticTyp {
     Func,
     Usize,
     Isize,
-    Def(String),
+    Def(Box<str>),
 }
 #[derive(Clone, Debug, PartialEq)]
 pub enum DirectiveTyp {
@@ -94,7 +94,7 @@ pub enum TokenTyp {
     Register(usize),
     Integer(u128),
     Float(f64),
-    String(String),
+    String(Box<str>),
     Colon,
     Comma,
     Semicolon,
@@ -111,7 +111,7 @@ pub enum TokenTyp {
     Squig,
     BinOp(BinOp),
     Directive(DirectiveTyp),
-    MetaString(String),
+    MetaString(Box<str>),
     AccessColon,
     FlagBegin,
     FlagColon,
