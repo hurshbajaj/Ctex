@@ -492,13 +492,15 @@ pub fn DT_colon(lexer: &mut Lexer) {
         }
         lexer.push_at(TokenTyp::AccessColon, col_start);
     } else {
-        if lexer.pf_counter == 1 {
-            pf_seq(lexer);
-        }
         unsafe {
             lexer.advance_n(1);
         }
-        lexer.push_at(TokenTyp::Colon, col_start);
+        if lexer.pf_counter == 1 {
+            pf_seq(lexer);
+            lexer.push_at(TokenTyp::FlagColon, col_start);
+        } else {
+            lexer.push_at(TokenTyp::Colon, col_start);
+        }
     }
 }
 
@@ -743,8 +745,10 @@ pub fn DT_ge(lexer: &mut Lexer) {
         }
         if lexer.pf_counter == 1 {
             pf_seq(lexer);
+            lexer.push_at(TokenTyp::BinOp(BinOp::Gt), col_start);
+        } else {
+            lexer.push_at(TokenTyp::FlagEnd, col_start);
         }
-        lexer.push_at(TokenTyp::BinOp(BinOp::Gt), col_start);
     }
 }
 

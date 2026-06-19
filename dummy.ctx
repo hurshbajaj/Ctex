@@ -40,7 +40,7 @@ $ main <type:ENTRY> {
 	/* cool! */
 
 	$ my_new_variable <asg> <type: uint_8> 4;
-	$ my_new_variable -> 7;
+	my_new_variable -> 7;
 
 	%octx.some_key -> ..;
 

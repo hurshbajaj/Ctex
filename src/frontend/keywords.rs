@@ -30,6 +30,7 @@ pub fn lookup_keyword(word: &str) -> Option<TokenTyp> {
         "f64" => Some(TokenTyp::StaticTyp(StaticTyp::F64)),
         "array" => Some(TokenTyp::StaticTyp(StaticTyp::Array)),
         "tuple" => Some(TokenTyp::StaticTyp(StaticTyp::Tuple)),
+        "trait" => Some(TokenTyp::StaticTyp(StaticTyp::Trait)),
         "enum" => Some(TokenTyp::StaticTyp(StaticTyp::Enum)),
         "scope" => Some(TokenTyp::StaticTyp(StaticTyp::Scope)),
         "object" => Some(TokenTyp::StaticTyp(StaticTyp::Obj)),
