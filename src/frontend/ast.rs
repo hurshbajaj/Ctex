@@ -352,7 +352,7 @@ impl<'a> Parser<'a> {
                             }
                             _ => {
                                 els.push(
-                                    self.parse_expr(22, None, false)
+                                    self.parse_expr(0, None, false)
                                         .unwrap_or_else(|_| panic!("Explicit")),
                                 );
                                 match self.tokstream.peek() {
@@ -372,6 +372,7 @@ impl<'a> Parser<'a> {
                                         },
                                         ..,
                                     ) => {
+                                        self.tokstream.next();
                                         break;
                                     }
                                     _ => panic!("Explicit"),
@@ -806,7 +807,10 @@ impl<'a> Parser<'a> {
     }
     fn parse_pattern_expr(&mut self) -> Result<Box<PatternExpr<'a>>, ()> {
         match self.tokstream.peek() {
-            Some(Token { typ: Wild, .. }) => Ok(Box::new(PatternExpr::Wildcard)),
+            Some(Token { typ: Wild, .. }) => {
+                self.tokstream.next();
+                Ok(Box::new(PatternExpr::Wildcard))
+            }
             Some(Token { typ: ParenOpen, .. }) => {
                 self.tokstream.next();
                 let mut v = vec![];
