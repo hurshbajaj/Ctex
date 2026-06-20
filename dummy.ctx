@@ -48,14 +48,14 @@ $ main <type:ENTRY> {
 	<struct> {
 		property: uint_64;
 	};
-	$ my_trait <asg> <type:trait(nul)> {
+	$ my_trait <asg> <type:t_fn(nul)> {
 		return %self.property;
 	};
-	$ my_second_trait <asg> <type:trait(nul)> {
+	$ my_second_trait <asg> <type:t_fn(nul)> {
 		return %self.property;
 	};
 
-	$ my_trait_unclaimed <type:trait(nul)>;
+	$ my_trait_unclaimed <type:t_fn(nul)>;
 
 	$ my_object <asg> <type:my_struct*> <mutable> {
 		property: 1,025 ;

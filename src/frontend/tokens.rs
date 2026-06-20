@@ -1,34 +1,5 @@
-#[derive(Clone, Debug, PartialEq, Copy)]
-pub enum StaticTyp {
-    Str,
-    U8,
-    U16,
-    U32,
-    U64,
-    U128,
-    I8,
-    I16,
-    I32,
-    I64,
-    I128,
-    F32,
-    F64,
-    Array,
-    Tuple,
-    Trait,
-    Enum,
-    Scope,
-    Obj,
-    Struct,
-    ENTRY,
-    INIT,
-    Bool,
-    Vector,
-    Func,
-    Usize,
-    Isize,
-    Def(Box<str>),
-}
+use crate::frontend::ast::StaticTyp;
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum DirectiveTyp {
     Use,
@@ -72,23 +43,17 @@ pub enum Keyword {
     Trait,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum FlgSingle {
-    Asg,
-    Mutable,
-}
-
+#[repr(u8)]
 #[derive(Clone, Debug, PartialEq)]
 pub enum Flg {
-    Single(FlgSingle),
+    Asg,
+    Mutable,
     Type,
     Trait,
-    Invalid,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum TokenTyp {
-    Flag(Flg),
     Keyword(Keyword),
     Identifier(usize),
     Register(usize),
@@ -113,9 +78,6 @@ pub enum TokenTyp {
     Directive(DirectiveTyp),
     MetaString(Box<str>),
     AccessColon,
-    FlagBegin,
-    FlagColon,
-    FlagEnd,
     Wild,
     Bang,
     StaticTyp(StaticTyp),

@@ -1,4 +1,5 @@
-use crate::frontend::tokens::{BinOp, DirectiveTyp, Keyword, StaticTyp, TokenTyp};
+use crate::frontend::ast::StaticTyp;
+use crate::frontend::tokens::{BinOp, DirectiveTyp, Keyword, TokenTyp};
 
 pub fn lookup_keyword(word: &str) -> Option<TokenTyp> {
     match word {
