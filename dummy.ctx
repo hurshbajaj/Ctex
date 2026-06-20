@@ -75,8 +75,8 @@ $ main <type:ENTRY> {
 		FAILURE,
 	};
 
-	$ my_array <asg> <type:array(uint_8; 2)> [1; 1];
-	$ my_vector <asg> <type: vec(uint_8)> 1::7::[];
+	$ my_array <asg> <type:array(u8; 2)> [1; 1];
+	$ my_vector <asg> <type: vec(u8)> 1::7::[];
 
 	$ my_type <asg> <type> array(uint_8; 2);
 	$ my_array <asg> <type:my_type*> [2; 2];

@@ -15,10 +15,11 @@ pub struct Parser<'a> {
     flag_repr_cap: usize,
     typ_repr_partition: u8,
     parsing_flag: bool,
+    typ_repr_partition_2: u8,
 }
 
 #[repr(u8)]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Copy)]
 pub enum StaticTyp {
     U8,
     U16,
@@ -44,12 +45,18 @@ pub enum StaticTyp {
     INIT,
     Bool,
 
-    Array,
-    Tuple,
+    // payload
+    // single
+    Func, // -> 22
     Trait,
     Vector,
-    Func,
-    Def, //post-ast logic
+
+    //variable-length
+    Tuple, // -> 25
+
+    // special
+    Array,
+    // User Defined: post-ast logic
 }
 
 #[derive(Debug)]
@@ -174,6 +181,7 @@ pub enum Expr<'a> {
     },
 
     Scope(Vec<Box<Stmt<'a>>>),
+    StaticType_payload_params(Vec<Box<Expr<'a>>>),
 }
 
 impl<'a> From<TokenTyp> for UnaryOp {
@@ -196,7 +204,8 @@ impl<'a> Parser<'a> {
             ignore_semi_c: false,
             flag_repr_partition: 1,
             flag_repr_cap: 3,
-            typ_repr_partition: 24,
+            typ_repr_partition: 22,
+            typ_repr_partition_2: 25, // for types with payloads of variable length
             parsing_flag: false,
         }
     }
@@ -249,16 +258,16 @@ impl<'a> Parser<'a> {
                     ..
                 }) => {
                     self.tokstream.next();
+                    self.parsing_flag = true;
                     let target = self
                         .parse_pattern_expr()
                         .unwrap_or_else(|_| panic!("Explicit"));
                     let mut flags = vec![];
                     let mut flags_pl = vec![];
                     loop {
-                        self.parsing_flag = false;
                         match self.tokstream.peek() {
                             Some(Token {
-                                typ: TokenTyp::BinOp(BinOp::Gt),
+                                typ: TokenTyp::BinOp(BinOp::Lt),
                                 ..
                             }) => {
                                 self.tokstream.next();
@@ -267,11 +276,13 @@ impl<'a> Parser<'a> {
                                         typ: TokenTyp::Identifier(n),
                                         ..
                                     }) if n <= &self.flag_repr_partition => {
+                                        dbg!(n);
+                                        dbg!(self.flag_repr_partition);
                                         flags.push(unsafe {
                                             std::mem::transmute::<u8, Flg>(n.to_owned() as u8)
                                         });
                                         self.tokstream.next();
-                                        self.expect(TokenTyp::BinOp(BinOp::Lt), || {
+                                        self.expect(TokenTyp::BinOp(BinOp::Gt), || {
                                             panic!("Explicit")
                                         });
                                     }
@@ -289,7 +300,7 @@ impl<'a> Parser<'a> {
                                                 .unwrap_or_else(|_| panic!("Explicit")),
                                         );
 
-                                        self.expect(TokenTyp::BinOp(BinOp::Lt), || {
+                                        self.expect(TokenTyp::BinOp(BinOp::Gt), || {
                                             panic!("Explicit")
                                         });
                                     }
@@ -300,7 +311,7 @@ impl<'a> Parser<'a> {
                                             self.parse_expr(0, None, false)
                                                 .unwrap_or_else(|_| panic!("Explicit")),
                                         );
-                                        self.expect(TokenTyp::BinOp(BinOp::Lt), || {
+                                        self.expect(TokenTyp::BinOp(BinOp::Gt), || {
                                             panic!("Explicit")
                                         });
                                     }
@@ -308,11 +319,12 @@ impl<'a> Parser<'a> {
                             }
 
                             _ => {
-                                self.parsing_flag = false;
                                 break;
                             }
                         }
                     }
+
+                    self.parsing_flag = false;
                     let value = self
                         .parse_expr(0, None, false)
                         .unwrap_or_else(|_| panic!("Explicit"));
@@ -429,7 +441,7 @@ impl<'a> Parser<'a> {
                     ..
                 })
                 | Some(Token {
-                    typ: TokenTyp::BinOp(BinOp::Mult),
+                    typ: TokenTyp::BinOp(BinOp::Mult), //Ptr
                     ..
                 }) => {
                     let unary_typ = self.tokstream.next().unwrap().typ.into();
@@ -580,7 +592,7 @@ impl<'a> Parser<'a> {
                 Some(Token {
                     typ: TokenTyp::BinOp(op),
                     ..
-                }) => {
+                }) if !self.parsing_flag || (op != &BinOp::Gt && op != &BinOp::Lt) => {
                     let op = op.clone();
 
                     let (l_bp, r_bp) = self.infix_bp(&op);
@@ -633,8 +645,8 @@ impl<'a> Parser<'a> {
 
             BinOp::Eq | BinOp::Neq => (13, 14),
 
-            BinOp::Lt | BinOp::Leq | BinOp::Geq => (15, 16),
-            BinOp::Gt if self.parsing_flag => (15, 16),
+            BinOp::Leq | BinOp::Geq => (15, 16),
+            BinOp::Lt | BinOp::Gt if !self.parsing_flag => (15, 16),
 
             BinOp::Index => (100, 101),
             _ => panic!("Explicit"),
@@ -689,10 +701,71 @@ impl<'a> Parser<'a> {
                 self.tokstream.next();
                 Ok(Box::new(Expr::Keyword(x)))
             }
+
             Some(&Token {
-                typ: TokenTyp::StaticTyp(ref n),
+                // array
+                typ: TokenTyp::StaticTyp(n),
                 ..
-            }) if n as *const StaticTyp as *const u8 as u8 >= self.typ_repr_partition => {
+            }) if n == StaticTyp::Array => {
+                dbg!(n as u8);
+                let token = self.tokstream.next().unwrap();
+
+                if let TokenTyp::StaticTyp(x) = token.typ {
+                    Ok(Box::new(Expr::TypeExpr(TypExpr {
+                        typ: x,
+                        payload: Some({
+                            self.expect(TokenTyp::ParenOpen, || panic!("Explicit"));
+                            let ret1 = self.parse_expr(0, None, false)?;
+                            self.expect(TokenTyp::Semicolon, || panic!("Explicit"));
+                            let ret2 = self.parse_expr(0, None, false)?;
+                            self.expect(TokenTyp::ParenClose, || panic!("Explicit"));
+                            Box::new(Expr::StaticType_payload_params(vec![ret1, ret2]))
+                        }),
+                    })))
+                } else {
+                    unreachable!()
+                }
+            }
+            Some(&Token {
+                // variable length type
+                typ: TokenTyp::StaticTyp(n),
+                ..
+            }) if n as u8 >= self.typ_repr_partition_2 => {
+                dbg!(n as u8);
+                let token = self.tokstream.next().unwrap();
+
+                if let TokenTyp::StaticTyp(x) = token.typ {
+                    Ok(Box::new(Expr::TypeExpr(TypExpr {
+                        typ: x,
+                        payload: Some({
+                            let mut ret = vec![];
+                            self.expect(TokenTyp::ParenOpen, || panic!("Explicit"));
+                            loop {
+                                ret.push(self.parse_expr(0, None, false)?);
+                                match self.tokstream.peek() {
+                                    Some(Token {
+                                        typ: TokenTyp::Semicolon,
+                                        ..
+                                    }) => {
+                                        self.tokstream.next();
+                                    }
+                                    _ => break,
+                                }
+                            }
+                            self.expect(TokenTyp::ParenClose, || panic!("Explicit"));
+                            Box::new(Expr::StaticType_payload_params(ret))
+                        }),
+                    })))
+                } else {
+                    unreachable!()
+                }
+            }
+            Some(&Token {
+                // single parameter type
+                typ: TokenTyp::StaticTyp(n),
+                ..
+            }) if n as u8 >= self.typ_repr_partition => {
+                dbg!(n as u8);
                 let token = self.tokstream.next().unwrap();
 
                 if let TokenTyp::StaticTyp(x) = token.typ {
@@ -710,9 +783,12 @@ impl<'a> Parser<'a> {
                 }
             }
             Some(&Token {
-                typ: TokenTyp::StaticTyp(_),
+                // no payload type
+                typ: TokenTyp::StaticTyp(n),
                 ..
             }) => {
+                dbg!(n);
+                dbg!(n as u8);
                 let token = self.tokstream.next().unwrap();
 
                 if let TokenTyp::StaticTyp(x) = token.typ {
@@ -724,7 +800,7 @@ impl<'a> Parser<'a> {
                     unreachable!()
                 }
             }
-            _ => Err(()),
+            x => Err(()),
         }
     }
     fn parse_pattern_expr(&mut self) -> Result<Box<PatternExpr<'a>>, ()> {
