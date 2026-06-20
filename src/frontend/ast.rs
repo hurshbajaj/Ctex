@@ -347,6 +347,7 @@ impl<'a> Parser<'a> {
                                 typ: TokenTyp::BracketClose,
                                 ..
                             }) => {
+                                self.tokstream.next();
                                 break;
                             }
                             _ => {
