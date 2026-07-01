@@ -1,16 +1,15 @@
-use crate::frontend::lexer::Lexer;
 use crate::frontend::ast::Parser;
+use crate::frontend::lexer::Lexer;
 use std::env;
 use std::time::Instant;
 
 mod frontend;
 
 fn main() {
-
     // ======================
     //         Sys
     // ======================
-    
+
     let mut path = "foc.ctx".to_string();
     let mut dump = false;
     for arg in env::args().skip(1) {
@@ -27,7 +26,7 @@ fn main() {
     // ======================
     //        Lexer
     // ======================
-    
+
     let t0 = Instant::now();
 
     let mut lexer = Lexer::new(path.clone(), 4096 * 2);
@@ -44,7 +43,7 @@ fn main() {
         println!("lex: {:.3?}", elapsed0);
         println!("----------------------------------------");
         for token in &lexer.tokStream {
-            println!("{:?}", token);
+            println!("{:?}", token.as_ref().unwrap());
         }
     }
 
@@ -54,17 +53,20 @@ fn main() {
 
     let t1 = Instant::now();
 
-    let mut Parser = Parser::new(lexer.tokStream.into_iter().peekable());
-    let ast = Parser.from_ast();
+    unsafe {
+        let end = (lexer.tokStream.as_ptr()).add(lexer.tokStream.len());
+        let mut Parser = Parser::new(lexer.tokStream);
+        let ast = Parser.from_ast();
 
-    let elapsed1 = t1.elapsed();
-    println!("ast: {:.3?}", elapsed1);
-    if dump {
-        println!("\n----------------------------------------");
-        println!("Abstract Syntax Tree");
-        println!("----------------------------------------");
+        let elapsed1 = t1.elapsed();
         println!("ast: {:.3?}", elapsed1);
-        println!("----------------------------------------");
-        println!("{:#?}", ast);
+        if dump {
+            println!("\n----------------------------------------");
+            println!("Abstract Syntax Tree");
+            println!("----------------------------------------");
+            println!("ast: {:.3?}", elapsed1);
+            println!("----------------------------------------");
+            println!("{:#?}", ast);
+        }
     }
 }

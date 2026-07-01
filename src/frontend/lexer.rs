@@ -15,7 +15,7 @@ pub struct Lexer {
     pub i: *const u8,
     pub row: usize,
     pub col: usize,
-    pub tokStream: Vec<Token>,
+    pub tokStream: Vec<Option<Token>>,
     pub idents: HashMap<String, TokenTyp>,
     pub idents_n: usize,
     file_len: usize,
@@ -97,10 +97,10 @@ impl Lexer {
     }
 
     fn push_at(&mut self, typ: TokenTyp, col_start: usize) {
-        self.tokStream.push(Token {
+        self.tokStream.push(Some(Token {
             typ,
             loc: (self.row, (col_start, self.col)),
-        });
+        }));
     }
 
     unsafe fn read_slice(&self, len: usize) -> &str {
@@ -284,10 +284,10 @@ pub fn DT_unicode(lexer: &mut Lexer) {
             return;
         }
         let typ = lexer.intern_with(word, TokenTyp::InvalidIdent);
-        lexer.tokStream.push(Token {
+        lexer.tokStream.push(Some(Token {
             typ,
             loc: (row, (col_start, col_start + 1)),
-        });
+        }));
     }
 }
 
@@ -547,15 +547,6 @@ pub fn DT_bracket_close(lexer: &mut Lexer) {
 }
 
 #[inline]
-pub fn DT_wild(lexer: &mut Lexer) {
-    let col_start = lexer.col;
-    unsafe {
-        lexer.advance_n(1);
-    }
-    lexer.push_at(TokenTyp::Wild, col_start);
-}
-
-#[inline]
 pub fn DT_question(lexer: &mut Lexer) {
     let col_start = lexer.col;
     unsafe {
@@ -580,6 +571,15 @@ pub fn DT_mult(lexer: &mut Lexer) {
         lexer.advance_n(1);
     }
     lexer.push_at(TokenTyp::BinOp(BinOp::Mult), col_start);
+}
+
+#[inline]
+pub fn DT_bar(lexer: &mut Lexer) {
+    let col_start = lexer.col;
+    unsafe {
+        lexer.advance_n(1);
+    }
+    lexer.push_at(TokenTyp::Bar, col_start);
 }
 
 #[inline]
@@ -918,6 +918,7 @@ impl Lexer {
 
                     b'<' => DT_le(self),
                     b'>' => DT_ge(self),
+                    b'|' => DT_bar(self),
                     b'=' => DT_eq(self),
                     b'!' => DT_bang(self),
 

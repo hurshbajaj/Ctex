@@ -38,9 +38,6 @@ pub enum Keyword {
     Blank,
     While,
     Match,
-    Mut,
-    Asg,
-    Trait,
 }
 
 #[repr(u8)]
@@ -69,6 +66,7 @@ pub enum TokenTyp {
     BracketClose,
     CurlyOpen,
     CurlyClose,
+    Bar,
     Andp,
     RArrow,
     FatRArrow,

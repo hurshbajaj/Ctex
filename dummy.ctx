@@ -1,6 +1,6 @@
-@use ~std;
-@from "/lib" "*.ctx" ;
-@import "lib.ctx";
+@use ~std; // packages
+@import "lib.ctx"; // project files, from project root
+@from "/lib" "*.ctx" ; // specialized import 
 
 @type_cast ~string {
 	
@@ -92,8 +92,8 @@ $ main <type:ENTRY> {
 	$ (x, y) <asg> <type:tuple(uint_8; 2)> some_random_tuple_value;
 
 	match my_enum_value {
-		SUCCESS(_string) => {},
-		FAILURE => {}
+		| SUCCESS(_string) => {},
+		| FAILURE => {}
 	}
 
 	match .. {
@@ -137,4 +137,6 @@ $ my_func <asg> <type:func(Result(b8))> {
 	self;
 	expected_typ_core71465; //for storing expected type
 */
-
+/*
+	Instead of concrete types you can use vars / regs / ptrs
+*/
