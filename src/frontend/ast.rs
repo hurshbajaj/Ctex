@@ -182,9 +182,9 @@ pub enum UnaryOp {
     ComplexType,
 }
 
+// Block Payloads
 #[derive(Debug)]
 pub enum CompilerDirective {
-    // Block Payloads
     // Use,
     // From,
     // Import,
