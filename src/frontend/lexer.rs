@@ -413,6 +413,9 @@ pub fn DT_or(lexer: &mut Lexer) {
         }
         lexer.push_at(TokenTyp::BinOp(BinOp::Or), col_start);
     } else {
+        unsafe {
+            lexer.advance_n(1);
+        }
         lexer.push_at(TokenTyp::Unknown, col_start);
     }
 }
@@ -574,15 +577,6 @@ pub fn DT_mult(lexer: &mut Lexer) {
 }
 
 #[inline]
-pub fn DT_bar(lexer: &mut Lexer) {
-    let col_start = lexer.col;
-    unsafe {
-        lexer.advance_n(1);
-    }
-    lexer.push_at(TokenTyp::Bar, col_start);
-}
-
-#[inline]
 pub fn DT_div(lexer: &mut Lexer) {
     if lexer.peek(1) == b'/' {
         unsafe {
@@ -636,23 +630,20 @@ pub fn DT_minus(lexer: &mut Lexer) {
 
 #[inline]
 pub fn DT_squig(lexer: &mut Lexer) {
-    if lexer.peek(1) == b'>' {
-        let col_start = lexer.col;
-        unsafe {
-            lexer.advance_n(2);
-        }
-        lexer.push_at(TokenTyp::RArrowSquig, col_start);
-    } else if lexer.peek(1) == b'%' {
-        let col_start = lexer.col;
+    let col_start = lexer.col;
+    unsafe {
+        lexer.advance_n(1);
+        lexer.scan_whitespace_run();
+    }
+    if lexer.peek(0) == b'>' {
         unsafe {
             lexer.advance_n(1);
         }
+        lexer.push_at(TokenTyp::RArrowSquig, col_start);
+    } else if lexer.peek(0) == b'%' {
         lexer.push_at(TokenTyp::Squig, col_start);
     } else {
         unsafe {
-            let col_start = lexer.col;
-            let b = lexer.advance(1);
-            lexer.bump_byte(b);
             let word = lexer.scan_ident_word();
             let word_ = word.clone();
             let typ = if let Some(t) = lexer.idents.get(&word) {
@@ -918,7 +909,6 @@ impl Lexer {
 
                     b'<' => DT_le(self),
                     b'>' => DT_ge(self),
-                    b'|' => DT_bar(self),
                     b'=' => DT_eq(self),
                     b'!' => DT_bang(self),
 

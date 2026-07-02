@@ -38,6 +38,7 @@ pub enum Keyword {
     Blank,
     While,
     Match,
+    Return,
 }
 
 #[repr(u8)]

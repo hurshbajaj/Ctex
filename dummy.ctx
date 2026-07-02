@@ -4,7 +4,7 @@
 
 @type_cast ~string {
 	
-	<type: func(u_8)> {
+	<type: func(u8)> {
 		..
 	};
 
@@ -13,7 +13,7 @@
 	};
 }
 
-$ some_enum <asg> <type:enum> {..}
+$ some_enum <asg> <type:enum> {..};
 
 $ register_initialization <type:INIT> {
 	%ictx_F <asg> <type:std::IO> std::IO::protobuf>

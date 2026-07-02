@@ -13,6 +13,7 @@ pub fn lookup_keyword(word: &str) -> Option<TokenTyp> {
         "nul" => Some(TokenTyp::Keyword(Keyword::Nul)),
         "mod" => Some(TokenTyp::BinOp(BinOp::Mod)),
         ".." => Some(TokenTyp::Keyword(Keyword::Blank)),
+        "return" => Some(TokenTyp::Keyword(Keyword::Return)),
         "string" => Some(TokenTyp::StaticTyp(StaticTyp::Str)),
         "u8" => Some(TokenTyp::StaticTyp(StaticTyp::U8)),
         "u16" => Some(TokenTyp::StaticTyp(StaticTyp::U16)),
