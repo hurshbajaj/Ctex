@@ -31,7 +31,6 @@ impl TokStream {
 pub struct Parser<'a> {
     tokstream: TokStream,
     _marker: PhantomData<&'a ()>,
-    ignore_semi_c: bool,
 
     flag_repr_partition: usize,
     flag_repr_cap: usize,
@@ -216,8 +215,8 @@ impl<'a> From<TokenTyp> for UnaryOp {
         match value {
             TokenTyp::BinOp(BinOp::Minus) => UnaryOp::Minus,
             TokenTyp::BinOp(BinOp::Plus) => UnaryOp::Plus,
-            TokenTyp::Andp => UnaryOp::Deref,
-            TokenTyp::BinOp(BinOp::Mult) => UnaryOp::Ptr,
+            TokenTyp::Andp => UnaryOp::Ptr,
+            TokenTyp::BinOp(BinOp::Mult) => UnaryOp::Deref,
             _ => unreachable!(),
         }
     }
@@ -228,7 +227,6 @@ impl<'a> Parser<'a> {
         Parser {
             tokstream: TokStream { tokens, cursor: 0 },
             _marker: PhantomData,
-            ignore_semi_c: false,
             flag_repr_partition: 1,   // No arg flag
             flag_repr_cap: 3,         // Arg Flag
             typ_repr_partition: 22,   // for types with single arg payload
@@ -265,7 +263,8 @@ impl<'a> Parser<'a> {
                 self.tokstream.next();
                 let stmt = Box::new(Stmt::RegDrop(
                     self.parse_expr(0, None, false)
-                        .unwrap_or_else(|()| panic!("Explicit")),
+                        .unwrap_or_else(|()| panic!("Explicit"))
+                        .0,
                 ));
                 self.expect(TokenTyp::Semicolon, || panic!("Explicit"));
                 Ok(stmt)
@@ -277,7 +276,8 @@ impl<'a> Parser<'a> {
                 self.tokstream.next();
                 let stmt = Box::new(Stmt::Return(
                     self.parse_expr(0, None, false)
-                        .unwrap_or_else(|()| panic!("Explicit")),
+                        .unwrap_or_else(|()| panic!("Explicit"))
+                        .0,
                 ));
                 self.expect(TokenTyp::Semicolon, || panic!("Explicit"));
                 Ok(stmt)
@@ -383,7 +383,8 @@ impl<'a> Parser<'a> {
                         self.expect(TokenTyp::Colon, || panic!("Explicit"));
                         let payload = Some(
                             self.parse_expr(0, None, false)
-                                .unwrap_or_else(|_| panic!("Explicit")),
+                                .unwrap_or_else(|_| panic!("Explicit"))
+                                .0,
                         );
 
                         self.expect(TokenTyp::BinOp(BinOp::Gt), || panic!("Explicit"));
@@ -398,7 +399,8 @@ impl<'a> Parser<'a> {
                     _ => {
                         let payload = Some(
                             self.parse_expr(0, None, false)
-                                .unwrap_or_else(|_| panic!("Explicit")),
+                                .unwrap_or_else(|_| panic!("Explicit"))
+                                .0,
                         );
                         self.expect(TokenTyp::BinOp(BinOp::Gt), || panic!("Explicit"));
 
@@ -523,14 +525,13 @@ impl<'a> Parser<'a> {
         }
     }
     fn parse_exprstmt(&mut self) -> Result<Box<Stmt<'a>>, ()> {
-        let stmt = Box::new(Stmt::ExprStmt(
-            self.parse_expr(0, None, false)
-                .unwrap_or_else(|()| panic!("Explicit")),
-        ));
-        if !self.ignore_semi_c {
+        let (stmt_, ignore_semi_c) = self
+            .parse_expr(0, None, false)
+            .unwrap_or_else(|()| panic!("Explicit"));
+
+        let stmt = Box::new(Stmt::ExprStmt(stmt_));
+        if !ignore_semi_c {
             self.expect(TokenTyp::Semicolon, || panic!("Explicit"));
-        } else {
-            self.ignore_semi_c = false;
         }
         Ok(stmt)
     }
@@ -539,7 +540,7 @@ impl<'a> Parser<'a> {
         min_bp: u8,
         lhs_: Option<Box<Expr<'a>>>,
         ignore_postfix_braces: bool,
-    ) -> Result<Box<Expr<'a>>, ()> {
+    ) -> Result<(Box<Expr<'a>>, bool), ()> {
         let mut lhs = if lhs_.is_none() {
             match self.tokstream.peek() {
                 Some(Token {
@@ -547,7 +548,7 @@ impl<'a> Parser<'a> {
                     ..
                 }) => {
                     self.tokstream.next();
-                    let target = self.parse_expr(0, None, false)?;
+                    let target = self.parse_expr(0, None, false)?.0;
                     let mut v = vec![];
                     self.expect(TokenTyp::CurlyOpen, || panic!("Explicit"));
                     loop {
@@ -566,7 +567,7 @@ impl<'a> Parser<'a> {
                                 let guard = if let Some(x) = self.tokstream.peek() {
                                     if x.typ == TokenTyp::Keyword(Keyword::If) {
                                         self.tokstream.next();
-                                        Some(self.parse_expr(0, None, false)?)
+                                        Some(self.parse_expr(0, None, false)?.0)
                                     } else {
                                         None
                                     }
@@ -574,7 +575,7 @@ impl<'a> Parser<'a> {
                                     None
                                 };
                                 self.expect(TokenTyp::FatRArrow, || panic!("Explicit"));
-                                let body = self.parse_expr(0, None, false)?;
+                                let body = self.parse_expr(0, None, false)?.0;
                                 v.push(MatchArm {
                                     body,
                                     guard,
@@ -612,11 +613,13 @@ impl<'a> Parser<'a> {
                             }
                         }
                     }
-                    self.ignore_semi_c = true;
-                    Box::new(Expr::Match {
-                        expr: target,
-                        arms: v,
-                    })
+                    (
+                        Box::new(Expr::Match {
+                            expr: target,
+                            arms: v,
+                        }),
+                        false,
+                    )
                 }
                 Some(Token {
                     typ: TokenTyp::Keyword(Keyword::Let),
@@ -660,7 +663,8 @@ impl<'a> Parser<'a> {
                                         self.expect(TokenTyp::Colon, || panic!("Explicit"));
                                         flags_pl.push(
                                             self.parse_expr(0, None, false)
-                                                .unwrap_or_else(|_| panic!("Explicit")),
+                                                .unwrap_or_else(|_| panic!("Explicit"))
+                                                .0,
                                         );
 
                                         self.expect(TokenTyp::BinOp(BinOp::Gt), || {
@@ -672,7 +676,8 @@ impl<'a> Parser<'a> {
                                         flags.push(Flg::Type);
                                         flags_pl.push(
                                             self.parse_expr(0, None, false)
-                                                .unwrap_or_else(|_| panic!("Explicit")),
+                                                .unwrap_or_else(|_| panic!("Explicit"))
+                                                .0,
                                         );
                                         self.expect(TokenTyp::BinOp(BinOp::Gt), || {
                                             panic!("Explicit")
@@ -690,13 +695,17 @@ impl<'a> Parser<'a> {
                     self.parsing_flag = false;
                     let value = self
                         .parse_expr(0, None, false)
-                        .unwrap_or_else(|_| panic!("Explicit"));
-                    Box::new(Expr::Decl {
-                        identifier: target,
-                        value,
-                        flags,
-                        flag_payload: flags_pl,
-                    })
+                        .unwrap_or_else(|_| panic!("Explicit"))
+                        .0;
+                    (
+                        Box::new(Expr::Decl {
+                            identifier: target,
+                            value,
+                            flags,
+                            flag_payload: flags_pl,
+                        }),
+                        false,
+                    )
                 }
                 Some(Token {
                     typ: TokenTyp::BracketOpen,
@@ -716,7 +725,8 @@ impl<'a> Parser<'a> {
                             _ => {
                                 els.push(
                                     self.parse_expr(0, None, false)
-                                        .unwrap_or_else(|_| panic!("Explicit")),
+                                        .unwrap_or_else(|_| panic!("Explicit"))
+                                        .0,
                                 );
                                 match self.tokstream.peek() {
                                     Some(
@@ -743,7 +753,7 @@ impl<'a> Parser<'a> {
                             }
                         }
                     }
-                    Box::new(Expr::Array(els))
+                    (Box::new(Expr::Array(els)), false)
                 }
                 Some(Token {
                     typ: TokenTyp::CurlyOpen,
@@ -778,7 +788,7 @@ impl<'a> Parser<'a> {
                                 },
                                 value: {
                                     self.expect(TokenTyp::Colon, || panic!("Explicit"));
-                                    self.parse_expr(0, None, false)?
+                                    self.parse_expr(0, None, false)?.0
                                 },
                             });
                             self.expect(TokenTyp::Semicolon, || panic!("Explicit"));
@@ -786,11 +796,14 @@ impl<'a> Parser<'a> {
 
                         self.tokstream.next();
 
-                        Box::new(Expr::Struct(fields))
+                        (Box::new(Expr::Struct(fields)), false)
                     }
-                    _ => Box::new(Expr::Scope(
-                        self.parse_block().unwrap_or_else(|_| panic!("Explicit")),
-                    )),
+                    _ => (
+                        Box::new(Expr::Scope(
+                            self.parse_block().unwrap_or_else(|_| panic!("Explicit")),
+                        )),
+                        false,
+                    ),
                 },
                 Some(Token {
                     typ: TokenTyp::Keyword(Keyword::If),
@@ -799,7 +812,8 @@ impl<'a> Parser<'a> {
                     self.tokstream.next();
                     let cond = self
                         .parse_expr(0, None, false)
-                        .unwrap_or_else(|_| panic!("Explicit"));
+                        .unwrap_or_else(|_| panic!("Explicit"))
+                        .0;
                     let then_block = self.parse_block().unwrap_or_else(|_| panic!("Explicit"));
 
                     let else_block = if matches!(
@@ -815,12 +829,14 @@ impl<'a> Parser<'a> {
                         None
                     };
 
-                    self.ignore_semi_c = true;
-                    Box::new(Expr::If {
-                        cond,
-                        then_block,
-                        else_block,
-                    })
+                    (
+                        Box::new(Expr::If {
+                            cond,
+                            then_block,
+                            else_block,
+                        }),
+                        true,
+                    )
                 }
                 Some(Token {
                     typ: TokenTyp::ParenOpen,
@@ -829,9 +845,10 @@ impl<'a> Parser<'a> {
                     self.tokstream.next();
                     let lhs = self
                         .parse_expr(0, None, false)
-                        .unwrap_or_else(|_| panic!("Explicit"));
+                        .unwrap_or_else(|_| panic!("Explicit"))
+                        .0;
                     self.expect(TokenTyp::ParenClose, || panic!("Explicit"));
-                    lhs
+                    (lhs, false)
                 }
 
                 Some(Token {
@@ -847,17 +864,21 @@ impl<'a> Parser<'a> {
                     ..
                 })
                 | Some(Token {
-                    typ: TokenTyp::BinOp(BinOp::Mult), //Ptr
+                    typ: TokenTyp::BinOp(BinOp::Mult), //Deref
                     ..
                 }) => {
                     let unary_typ = self.tokstream.next().unwrap().typ.into();
                     let rhs = self
                         .parse_expr(21, None, false)
-                        .unwrap_or_else(|_| panic!("Explicit"));
-                    Box::new(Expr::Unary {
-                        op: unary_typ,
-                        target: rhs,
-                    })
+                        .unwrap_or_else(|_| panic!("Explicit"))
+                        .0;
+                    (
+                        Box::new(Expr::Unary {
+                            op: unary_typ,
+                            target: rhs,
+                        }),
+                        false,
+                    )
                 }
 
                 _ => self
@@ -865,7 +886,7 @@ impl<'a> Parser<'a> {
                     .unwrap_or_else(|_| panic!("Explicit")),
             }
         } else {
-            lhs_.unwrap()
+            (lhs_.unwrap(), false)
         };
         loop {
             match self.tokstream.peek() {
@@ -876,8 +897,15 @@ impl<'a> Parser<'a> {
                     self.tokstream.next();
                     let value = self
                         .parse_expr(0, None, false)
-                        .unwrap_or_else(|_| panic!("Explicit"));
-                    lhs = Box::new(Expr::Asg { target: lhs, value });
+                        .unwrap_or_else(|_| panic!("Explicit"))
+                        .0;
+                    lhs = (
+                        Box::new(Expr::Asg {
+                            target: lhs.0,
+                            value,
+                        }),
+                        false,
+                    );
                     break;
                 }
                 Some(Token {
@@ -889,9 +917,16 @@ impl<'a> Parser<'a> {
                         op: UnaryOp::Ptr,
                         target: self
                             .parse_expr(0, None, false)
-                            .unwrap_or_else(|_| panic!("Explicit")),
+                            .unwrap_or_else(|_| panic!("Explicit"))
+                            .0,
                     });
-                    lhs = Box::new(Expr::Asg { target: lhs, value });
+                    lhs = (
+                        Box::new(Expr::Asg {
+                            target: lhs.0,
+                            value,
+                        }),
+                        false,
+                    );
                     break;
                 }
                 Some(Token {
@@ -904,10 +939,13 @@ impl<'a> Parser<'a> {
 
                     self.tokstream.next();
 
-                    lhs = Box::new(Expr::Unary {
-                        op: UnaryOp::Bang,
-                        target: lhs,
-                    });
+                    lhs = (
+                        Box::new(Expr::Unary {
+                            op: UnaryOp::Bang,
+                            target: lhs.0,
+                        }),
+                        false,
+                    );
                 }
 
                 Some(Token {
@@ -920,10 +958,13 @@ impl<'a> Parser<'a> {
 
                     self.tokstream.next();
 
-                    lhs = Box::new(Expr::Unary {
-                        op: UnaryOp::ComplexType,
-                        target: lhs,
-                    });
+                    lhs = (
+                        Box::new(Expr::Unary {
+                            op: UnaryOp::ComplexType,
+                            target: lhs.0,
+                        }),
+                        false,
+                    );
                 }
 
                 Some(Token {
@@ -936,50 +977,54 @@ impl<'a> Parser<'a> {
 
                     self.tokstream.next();
 
-                    lhs = Box::new(Expr::Call {
-                        callee: lhs,
-                        args: {
-                            let mut args = vec![];
-                            loop {
-                                match self.tokstream.peek() {
-                                    Some(Token {
-                                        typ: TokenTyp::ParenClose,
-                                        ..
-                                    }) => {
-                                        break;
-                                    }
-                                    _ => {
-                                        args.push(
-                                            self.parse_expr(0, None, false)
-                                                .unwrap_or_else(|_| panic!("Explicit")),
-                                        );
-                                        match self.tokstream.peek() {
-                                            Some(
-                                                Token {
-                                                    typ: TokenTyp::Semicolon,
-                                                    ..
-                                                },
-                                                ..,
-                                            ) => {
-                                                self.tokstream.next();
+                    lhs = (
+                        Box::new(Expr::Call {
+                            callee: lhs.0,
+                            args: {
+                                let mut args = vec![];
+                                loop {
+                                    match self.tokstream.peek() {
+                                        Some(Token {
+                                            typ: TokenTyp::ParenClose,
+                                            ..
+                                        }) => {
+                                            break;
+                                        }
+                                        _ => {
+                                            args.push(
+                                                self.parse_expr(0, None, false)
+                                                    .unwrap_or_else(|_| panic!("Explicit"))
+                                                    .0,
+                                            );
+                                            match self.tokstream.peek() {
+                                                Some(
+                                                    Token {
+                                                        typ: TokenTyp::Semicolon,
+                                                        ..
+                                                    },
+                                                    ..,
+                                                ) => {
+                                                    self.tokstream.next();
+                                                }
+                                                Some(
+                                                    Token {
+                                                        typ: TokenTyp::ParenClose,
+                                                        ..
+                                                    },
+                                                    ..,
+                                                ) => {
+                                                    break;
+                                                }
+                                                _ => panic!("Explicit"),
                                             }
-                                            Some(
-                                                Token {
-                                                    typ: TokenTyp::ParenClose,
-                                                    ..
-                                                },
-                                                ..,
-                                            ) => {
-                                                break;
-                                            }
-                                            _ => panic!("Explicit"),
                                         }
                                     }
                                 }
-                            }
-                            args
-                        },
-                    });
+                                args
+                            },
+                        }),
+                        false,
+                    );
                     self.expect(TokenTyp::ParenClose, || panic!("Explicit"));
                 }
 
@@ -993,12 +1038,16 @@ impl<'a> Parser<'a> {
 
                     self.tokstream.next();
 
-                    lhs = Box::new(Expr::Index {
-                        base: lhs,
-                        index: self
-                            .parse_expr(22, None, false)
-                            .unwrap_or_else(|_| panic!("Explicit")),
-                    });
+                    lhs = (
+                        Box::new(Expr::Index {
+                            base: lhs.0,
+                            index: self
+                                .parse_expr(22, None, false)
+                                .unwrap_or_else(|_| panic!("Explicit"))
+                                .0,
+                        }),
+                        false,
+                    );
                     self.expect(TokenTyp::BracketClose, || panic!("Explicit"));
                 }
 
@@ -1012,12 +1061,16 @@ impl<'a> Parser<'a> {
 
                     self.tokstream.next();
 
-                    lhs = Box::new(Expr::Chain {
-                        head: lhs,
-                        tail: self
-                            .parse_expr(21, None, false)
-                            .unwrap_or_else(|_| panic!("Explicit")),
-                    });
+                    lhs = (
+                        Box::new(Expr::Chain {
+                            head: lhs.0,
+                            tail: self
+                                .parse_expr(21, None, false)
+                                .unwrap_or_else(|_| panic!("Explicit"))
+                                .0,
+                        }),
+                        false,
+                    );
                 }
 
                 Some(Token {
@@ -1035,9 +1088,17 @@ impl<'a> Parser<'a> {
 
                     let rhs = self
                         .parse_expr(r_bp, None, false)
-                        .unwrap_or_else(|_| panic!("Explicit"));
+                        .unwrap_or_else(|_| panic!("Explicit"))
+                        .0;
 
-                    lhs = Box::new(Expr::Bin { op, lhs, rhs });
+                    lhs = (
+                        Box::new(Expr::Bin {
+                            op,
+                            lhs: lhs.0,
+                            rhs,
+                        }),
+                        false,
+                    );
                 }
 
                 _ => break,
@@ -1083,22 +1144,21 @@ impl<'a> Parser<'a> {
             _ => panic!("Explicit"),
         }
     }
-    fn parse_prim_expr(&mut self) -> Result<Box<Expr<'a>>, ()> {
+    fn parse_prim_expr(&mut self) -> Result<(Box<Expr<'a>>, bool), ()> {
         match self.tokstream.peek() {
             Some(&Token {
                 typ: TokenTyp::Keyword(Keyword::Blank),
                 ..
             }) => {
                 self.tokstream.next();
-                self.ignore_semi_c = true;
-                Ok(Box::new(Expr::Blank))
+                Ok((Box::new(Expr::Blank), true))
             }
             Some(&Token {
                 typ: TokenTyp::Register(x),
                 ..
             }) => {
                 self.tokstream.next();
-                Ok(Box::new(Expr::Reg(x.to_owned())))
+                Ok((Box::new(Expr::Reg(x.to_owned())), false))
             }
 
             Some(&Token {
@@ -1107,7 +1167,7 @@ impl<'a> Parser<'a> {
             }) => {
                 let x = x.to_owned();
                 self.tokstream.next();
-                Ok(Box::new(Expr::String(x)))
+                Ok((Box::new(Expr::String(x)), false))
             }
 
             Some(&Token {
@@ -1116,7 +1176,7 @@ impl<'a> Parser<'a> {
             }) => {
                 let x = x.to_owned();
                 self.tokstream.next();
-                Ok(Box::new(Expr::MetaString(x)))
+                Ok((Box::new(Expr::MetaString(x)), false))
             }
 
             Some(&Token {
@@ -1124,7 +1184,7 @@ impl<'a> Parser<'a> {
                 ..
             }) => {
                 self.tokstream.next();
-                Ok(Box::new(Expr::Var(x.to_owned())))
+                Ok((Box::new(Expr::Var(x.to_owned())), false))
             }
 
             Some(&Token {
@@ -1132,7 +1192,7 @@ impl<'a> Parser<'a> {
                 ..
             }) => {
                 self.tokstream.next();
-                Ok(Box::new(Expr::Integer(x.to_owned())))
+                Ok((Box::new(Expr::Integer(x.to_owned())), false))
             }
 
             Some(&Token {
@@ -1140,14 +1200,14 @@ impl<'a> Parser<'a> {
                 ..
             }) => {
                 self.tokstream.next();
-                Ok(Box::new(Expr::Float(x.to_owned())))
+                Ok((Box::new(Expr::Float(x.to_owned())), false))
             }
             Some(&Token {
                 typ: TokenTyp::Keyword(x),
                 ..
             }) => {
                 self.tokstream.next();
-                Ok(Box::new(Expr::Keyword(x)))
+                Ok((Box::new(Expr::Keyword(x)), false))
             }
 
             Some(&Token {
@@ -1158,17 +1218,20 @@ impl<'a> Parser<'a> {
                 let token = self.tokstream.next().unwrap();
 
                 if let TokenTyp::StaticTyp(x) = token.typ {
-                    Ok(Box::new(Expr::TypeExpr(TypExpr {
-                        typ: x,
-                        payload: Some({
-                            self.expect(TokenTyp::ParenOpen, || panic!("Explicit"));
-                            let ret1 = self.parse_expr(0, None, false)?;
-                            self.expect(TokenTyp::Semicolon, || panic!("Explicit"));
-                            let ret2 = self.parse_expr(0, None, false)?;
-                            self.expect(TokenTyp::ParenClose, || panic!("Explicit"));
-                            Box::new(Expr::StaticType_payload_params(vec![ret1, ret2]))
-                        }),
-                    })))
+                    Ok((
+                        Box::new(Expr::TypeExpr(TypExpr {
+                            typ: x,
+                            payload: Some({
+                                self.expect(TokenTyp::ParenOpen, || panic!("Explicit"));
+                                let ret1 = self.parse_expr(0, None, false)?.0;
+                                self.expect(TokenTyp::Semicolon, || panic!("Explicit"));
+                                let ret2 = self.parse_expr(0, None, false)?.0;
+                                self.expect(TokenTyp::ParenClose, || panic!("Explicit"));
+                                Box::new(Expr::StaticType_payload_params(vec![ret1, ret2]))
+                            }),
+                        })),
+                        false,
+                    ))
                 } else {
                     unreachable!()
                 }
@@ -1180,27 +1243,30 @@ impl<'a> Parser<'a> {
             }) if n as u8 >= self.typ_repr_partition_2 => {
                 self.tokstream.next();
 
-                Ok(Box::new(Expr::TypeExpr(TypExpr {
-                    typ: n,
-                    payload: Some({
-                        let mut ret = vec![];
-                        self.expect(TokenTyp::ParenOpen, || panic!("Explicit"));
-                        loop {
-                            ret.push(self.parse_expr(0, None, false)?);
-                            match self.tokstream.peek() {
-                                Some(Token {
-                                    typ: TokenTyp::Semicolon,
-                                    ..
-                                }) => {
-                                    self.tokstream.next();
+                Ok((
+                    Box::new(Expr::TypeExpr(TypExpr {
+                        typ: n,
+                        payload: Some({
+                            let mut ret = vec![];
+                            self.expect(TokenTyp::ParenOpen, || panic!("Explicit"));
+                            loop {
+                                ret.push(self.parse_expr(0, None, false)?.0);
+                                match self.tokstream.peek() {
+                                    Some(Token {
+                                        typ: TokenTyp::Semicolon,
+                                        ..
+                                    }) => {
+                                        self.tokstream.next();
+                                    }
+                                    _ => break,
                                 }
-                                _ => break,
                             }
-                        }
-                        self.expect(TokenTyp::ParenClose, || panic!("Explicit"));
-                        Box::new(Expr::StaticType_payload_params(ret))
-                    }),
-                })))
+                            self.expect(TokenTyp::ParenClose, || panic!("Explicit"));
+                            Box::new(Expr::StaticType_payload_params(ret))
+                        }),
+                    })),
+                    false,
+                ))
             }
             Some(&Token {
                 // single parameter type
@@ -1209,15 +1275,18 @@ impl<'a> Parser<'a> {
             }) if n as u8 >= self.typ_repr_partition => {
                 self.tokstream.next();
 
-                Ok(Box::new(Expr::TypeExpr(TypExpr {
-                    typ: n,
-                    payload: Some({
-                        self.expect(TokenTyp::ParenOpen, || panic!("Explicit"));
-                        let ret = self.parse_expr(0, None, false)?;
-                        self.expect(TokenTyp::ParenClose, || panic!("Explicit"));
-                        ret
-                    }),
-                })))
+                Ok((
+                    Box::new(Expr::TypeExpr(TypExpr {
+                        typ: n,
+                        payload: Some({
+                            self.expect(TokenTyp::ParenOpen, || panic!("Explicit"));
+                            let ret = self.parse_expr(0, None, false)?.0;
+                            self.expect(TokenTyp::ParenClose, || panic!("Explicit"));
+                            ret
+                        }),
+                    })),
+                    false,
+                ))
             }
             Some(&Token {
                 // no payload type
@@ -1225,10 +1294,13 @@ impl<'a> Parser<'a> {
                 ..
             }) => {
                 self.tokstream.next();
-                Ok(Box::new(Expr::TypeExpr(TypExpr {
-                    typ: n,
-                    payload: None,
-                })))
+                Ok((
+                    Box::new(Expr::TypeExpr(TypExpr {
+                        typ: n,
+                        payload: None,
+                    })),
+                    false,
+                ))
             }
             _ => {
                 panic!("Explicit")
@@ -1275,7 +1347,7 @@ impl<'a> Parser<'a> {
             Some(Token {
                 typ: Identifier(_), ..
             }) => {
-                let lhs = self.parse_expr(0, None, true)?;
+                let lhs = self.parse_expr(0, None, true)?.0;
                 match self.tokstream.peek() {
                     Some(Token { typ: ParenOpen, .. }) => {
                         self.tokstream.next();
@@ -1291,7 +1363,7 @@ impl<'a> Parser<'a> {
             }
             None => Err(()),
             _ => Ok(Box::new(PatternExpr::Expr(
-                self.parse_expr(0, None, false)?,
+                self.parse_expr(0, None, false)?.0,
             ))),
         }
     }
