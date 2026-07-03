@@ -589,6 +589,7 @@ pub fn DT_div(lexer: &mut Lexer) {
     } else if lexer.peek(1) == b'*' {
         let col_start = lexer.col;
         unsafe {
+            let mut mcn = 1;
             lexer.advance_n(2);
             loop {
                 if lexer.at_eof() {
@@ -596,7 +597,15 @@ pub fn DT_div(lexer: &mut Lexer) {
                     return;
                 }
                 if lexer.peek(0) == b'*' && lexer.peek(1) == b'/' {
+                    mcn -= 1;
                     lexer.advance_n(2);
+                }
+
+                if lexer.peek(1) == b'*' && lexer.peek(0) == b'/' {
+                    mcn += 1;
+                    lexer.advance_n(2);
+                }
+                if mcn < 1 {
                     break;
                 }
                 let b = lexer.advance(1);
