@@ -416,7 +416,7 @@ pub fn DT_or(lexer: &mut Lexer) {
         unsafe {
             lexer.advance_n(1);
         }
-        lexer.push_at(TokenTyp::Unknown, col_start);
+        lexer.push_at(TokenTyp::Bar, col_start);
     }
 }
 

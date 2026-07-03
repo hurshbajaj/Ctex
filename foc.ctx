@@ -18,15 +18,16 @@
 	};
 */
 
-
 {
 	| <string> name,
 	| <u8> age,
 };
 
+/*
 {
 	name: "jose",
 	age: 21,
 };
 
 {};
+*/
