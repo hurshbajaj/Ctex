@@ -794,12 +794,15 @@ impl<'a> Parser<'a> {
                     typ: TokenTyp::ParenOpen,
                     ..
                 }) => {
+                    let was_parsing_flag = self.parsing_flag;
+                    self.parsing_flag = false;
                     self.tokstream.next();
                     let lhs = self
                         .parse_expr(0, None, false)
                         .unwrap_or_else(|_| panic!("Explicit"))
                         .0;
                     self.expect(TokenTyp::ParenClose, || panic!("Explicit"));
+                    self.parsing_flag = was_parsing_flag;
                     (lhs, false)
                 }
 
@@ -1028,7 +1031,7 @@ impl<'a> Parser<'a> {
                 Some(Token {
                     typ: TokenTyp::BinOp(op),
                     ..
-                }) if !self.parsing_flag || (op != &BinOp::Gt && op != &BinOp::Lt) => {
+                }) if !self.parsing_flag || op != &BinOp::Gt => {
                     let op = op.clone();
 
                     let (l_bp, r_bp) = self.infix_bp(&op);
@@ -1089,8 +1092,8 @@ impl<'a> Parser<'a> {
 
             BinOp::Eq | BinOp::Neq => (13, 14),
 
-            BinOp::Leq | BinOp::Geq => (15, 16),
-            BinOp::Lt | BinOp::Gt if !self.parsing_flag => (15, 16),
+            BinOp::Leq | BinOp::Geq | BinOp::Lt => (15, 16),
+            BinOp::Gt if !self.parsing_flag => (15, 16),
 
             BinOp::Index => (100, 101),
             _ => panic!("Explicit"),
