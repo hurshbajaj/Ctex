@@ -92,8 +92,8 @@ $ main <type:ENTRY> {
 	$ (x, y) <asg> <type:tuple(uint_8; 2)> some_random_tuple_value;
 
 	match my_enum_value {
-		| SUCCESS(_string) => {},
-		| FAILURE => {}
+		SUCCESS(_string) => {},
+		FAILURE => {}
 	}
 
 	match .. {

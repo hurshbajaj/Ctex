@@ -1,5 +1,32 @@
 /*
-/*
+	match my_enum_value {
+		SUCCESS(_string) => {},
+		FAILURE => {}
+	};
 
+	match .. {
+		(x, y) => {},
+	};
+
+	match .. {
+		hl::ll => {},
+		? => {}
+	};
+
+	<string> { 
+		..
+	};
 */
-*/
+
+
+{
+	| <string> name,
+	| <u8> age,
+};
+
+{
+	name: "jose",
+	age: 21,
+};
+
+{};
