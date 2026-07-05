@@ -1,33 +1,21 @@
-/*
-	match my_enum_value {
-		SUCCESS(_string) => {},
-		FAILURE => {}
-	};
-
-	match .. {
-		(x, y) => {},
-	};
-
-	match .. {
-		hl::ll => {},
-		? => {}
-	};
-
-	<string> { 
-		..
-	};
-*/
-
 {
-	| <string> name,
-	| <u8> age,
+	| Ok( *(%argv[0]) ), 
+	| Err,
 };
 
 /*
-{
-	name: "jose",
-	age: 21,
+struct {
+	<str> name,
+	<mut> <u8> age
 };
 
-{};
+
+{
+	name: "Josh",
+	age: 2
+};
+
+{
+	..
+};
 */

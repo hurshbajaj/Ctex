@@ -110,7 +110,7 @@ pub enum Expr<'a> {
     Array(Vec<Box<Expr<'a>>>),
     Decl {
         identifier: Box<PatternExpr<'a>>,
-        value: Box<Expr<'a>>,
+        value: Option<Box<Expr<'a>>>,
         flags: Vec<FlgS<'a>>,
     },
     Asg {
@@ -133,6 +133,13 @@ pub enum Expr<'a> {
     Blank,
     MetaString(Box<str>),
     Struct(Vec<FlaggedField<'a>>),
+    Enum(Vec<Variant<'a>>),
+}
+
+#[derive(Debug)]
+struct Variant<'a> {
+    name: usize,
+    payload: Option<Box<Expr<'a>>>,
 }
 
 #[derive(Debug)]
@@ -462,10 +469,12 @@ impl<'a> Parser<'a> {
                         _ => panic!("Explcit"),
                     }
                 }
+                let block = self.parse_block().unwrap_or_else(|_| panic!("Explicit"));
+                self.expect(TokenTyp::Semicolon, || panic!("Explicit"));
                 Ok(Box::new(Stmt::CompilerDirective {
                     directive: dt,
                     flags: args,
-                    block: self.parse_block().unwrap_or_else(|_| panic!("Explicit")),
+                    block,
                 }))
             }
             _ => self.parse_exprstmt(),
@@ -647,10 +656,17 @@ impl<'a> Parser<'a> {
                     }
 
                     self.parsing_flag = false;
-                    let value = self
-                        .parse_expr(0, None, false)
-                        .unwrap_or_else(|_| panic!("Explicit"))
-                        .0;
+                    let value = match self.tokstream.peek() {
+                        Some(Token {
+                            typ: TokenTyp::Semicolon,
+                            ..
+                        }) => None,
+                        _ => Some(
+                            self.parse_expr(0, None, false)
+                                .unwrap_or_else(|_| panic!("Explicit"))
+                                .0,
+                        ),
+                    };
                     (
                         Box::new(Expr::Decl {
                             identifier: target,
@@ -709,168 +725,199 @@ impl<'a> Parser<'a> {
                     (Box::new(Expr::Array(els)), false)
                 }
                 Some(Token {
-                    typ: TokenTyp::CurlyOpen,
+                    typ: TokenTyp::StaticTyp(StaticTyp::Struct),
                     ..
-                }) => match self.peek_2() {
-                    Some(Token {
-                        typ: TokenTyp::Bar, ..
-                    }) => {
-                        self.tokstream.next();
-                        let mut flagged_fields = vec![];
+                }) => {
+                    self.tokstream.next();
+                    self.expect(TokenTyp::CurlyOpen, || panic!("Explicit"));
+                    let mut fields = vec![];
+                    loop {
+                        self.parsing_flag = true;
+                        let mut flags = vec![];
                         loop {
                             match self.tokstream.peek() {
                                 Some(Token {
-                                    typ: TokenTyp::Bar, ..
+                                    typ: TokenTyp::BinOp(BinOp::Lt),
+                                    ..
                                 }) => {
                                     self.tokstream.next();
-                                    self.parsing_flag = true;
+                                    match self.tokstream.peek() {
+                                        Some(Token {
+                                            typ: TokenTyp::Identifier(n),
+                                            ..
+                                        }) if n <= &self.flag_repr_partition => {
+                                            flags.push(FlgS {
+                                                flg: unsafe {
+                                                    std::mem::transmute::<u8, Flg>(
+                                                        n.to_owned() as u8
+                                                    )
+                                                },
+                                                pl: None,
+                                            });
+                                            self.tokstream.next();
+                                            self.expect(TokenTyp::BinOp(BinOp::Gt), || {
+                                                panic!("Explicit")
+                                            });
+                                        }
+                                        Some(Token {
+                                            typ: TokenTyp::Identifier(n),
+                                            ..
+                                        }) if n <= &self.flag_repr_cap => {
+                                            let flg = (unsafe {
+                                                std::mem::transmute::<u8, Flg>(n.to_owned() as u8)
+                                            });
+                                            self.tokstream.next();
+                                            self.expect(TokenTyp::Colon, || panic!("Explicit"));
+                                            flags.push(FlgS {
+                                                flg,
+                                                pl: Some(
+                                                    self.parse_expr(0, None, false)
+                                                        .unwrap_or_else(|_| panic!("Explicit"))
+                                                        .0,
+                                                ),
+                                            });
 
-                                    let mut flags = vec![];
-                                    loop {
-                                        match self.tokstream.peek() {
-                                            Some(Token {
-                                                typ: TokenTyp::BinOp(BinOp::Lt),
-                                                ..
-                                            }) => {
-                                                self.tokstream.next();
-                                                match self.tokstream.peek() {
-                                                    Some(Token {
-                                                        typ: TokenTyp::Identifier(n),
-                                                        ..
-                                                    }) if n <= &self.flag_repr_partition => {
-                                                        flags.push(FlgS {
-                                                            flg: unsafe {
-                                                                std::mem::transmute::<u8, Flg>(
-                                                                    n.to_owned() as u8,
-                                                                )
-                                                            },
-                                                            pl: None,
-                                                        });
-                                                        self.tokstream.next();
-                                                        self.expect(
-                                                            TokenTyp::BinOp(BinOp::Gt),
-                                                            || panic!("Explicit"),
-                                                        );
-                                                    }
-                                                    Some(Token {
-                                                        typ: TokenTyp::Identifier(n),
-                                                        ..
-                                                    }) if n <= &self.flag_repr_cap => {
-                                                        let flg = (unsafe {
-                                                            std::mem::transmute::<u8, Flg>(
-                                                                n.to_owned() as u8,
-                                                            )
-                                                        });
-                                                        self.tokstream.next();
-                                                        self.expect(TokenTyp::Colon, || {
-                                                            panic!("Explicit")
-                                                        });
-                                                        flags.push(FlgS {
-                                                            flg,
-                                                            pl: Some(
-                                                                self.parse_expr(0, None, false)
-                                                                    .unwrap_or_else(|_| {
-                                                                        panic!("Explicit")
-                                                                    })
-                                                                    .0,
-                                                            ),
-                                                        });
+                                            self.expect(TokenTyp::BinOp(BinOp::Gt), || {
+                                                panic!("Explicit")
+                                            });
+                                        }
 
-                                                        self.expect(
-                                                            TokenTyp::BinOp(BinOp::Gt),
-                                                            || panic!("Explicit"),
-                                                        );
-                                                    }
-
-                                                    _ => {
-                                                        flags.push(FlgS {
-                                                            flg: Flg::Type,
-                                                            pl: Some(
-                                                                self.parse_expr(0, None, false)
-                                                                    .unwrap_or_else(|_| {
-                                                                        panic!("Explicit")
-                                                                    })
-                                                                    .0,
-                                                            ),
-                                                        });
-                                                        self.expect(
-                                                            TokenTyp::BinOp(BinOp::Gt),
-                                                            || panic!("Explicit"),
-                                                        );
-                                                    }
-                                                }
-                                            }
-
-                                            _ => {
-                                                break;
-                                            }
+                                        _ => {
+                                            flags.push(FlgS {
+                                                flg: Flg::Type,
+                                                pl: Some(
+                                                    self.parse_expr(0, None, false)
+                                                        .unwrap_or_else(|_| panic!("Explicit"))
+                                                        .0,
+                                                ),
+                                            });
+                                            self.expect(TokenTyp::BinOp(BinOp::Gt), || {
+                                                panic!("Explicit")
+                                            });
                                         }
                                     }
-
-                                    self.parsing_flag = false;
-                                    flagged_fields.push(FlaggedField {
-                                        field: self
-                                            .parse_prim_expr()
-                                            .unwrap_or_else(|_| panic!("Explicit"))
-                                            .0,
-                                        flags,
-                                    });
-                                    self.expect(TokenTyp::Comma, || panic!("Explicit"));
                                 }
-                                _ => break,
+
+                                _ => {
+                                    break;
+                                }
                             }
                         }
-                        println!("Before }}: {:?}", self.tokstream.peek());
-                        self.expect(TokenTyp::CurlyClose, || panic!("Explicit"));
-                        (Box::new(Expr::Struct(flagged_fields)), false)
+
+                        self.parsing_flag = false;
+                        let field = self
+                            .parse_prim_expr()
+                            .unwrap_or_else(|_| panic!("Explicit"))
+                            .0;
+                        fields.push(FlaggedField { field, flags });
+                        match self
+                            .tokstream
+                            .peek()
+                            .unwrap_or_else(|| panic!("Explicit"))
+                            .typ
+                        {
+                            TokenTyp::CurlyClose => {
+                                self.tokstream.next();
+                                break;
+                            }
+                            TokenTyp::Comma => {
+                                self.tokstream.next();
+                                match self
+                                    .tokstream
+                                    .peek()
+                                    .unwrap_or_else(|| panic!("Explicit"))
+                                    .typ
+                                {
+                                    TokenTyp::CurlyClose => {
+                                        self.tokstream.next();
+                                        break;
+                                    }
+                                    _ => continue,
+                                }
+                            }
+                            _ => panic!("Explicit"),
+                        }
                     }
-
-                    _ => match self.peek_3() {
-                        Some(Token {
-                            typ: TokenTyp::Colon,
-                            ..
-                        }) => {
-                            self.tokstream.next();
-                            let mut fields = Vec::new();
-
-                            while !matches!(
-                                self.tokstream.peek(),
-                                Some(Token {
-                                    typ: TokenTyp::CurlyClose,
-                                    ..
-                                })
-                            ) {
-                                fields.push(Field {
-                                    field: {
+                    (Box::new(Expr::Struct(fields)), false)
+                }
+                Some(Token {
+                    typ: TokenTyp::CurlyOpen,
+                    ..
+                }) => match self.peek_2().unwrap_or_else(|| panic!("Explicit")) {
+                    Token {
+                        typ: TokenTyp::Bar, ..
+                    } => {
+                        self.tokstream.next();
+                        let mut variants = vec![];
+                        loop {
+                            match self
+                                .tokstream
+                                .peek()
+                                .unwrap_or_else(|| panic!("Explicit"))
+                                .typ
+                            {
+                                TokenTyp::Bar => {
+                                    self.tokstream.next();
+                                    let var = self
+                                        .parse_prim_expr()
+                                        .unwrap_or_else(|_| panic!("Explicit"))
+                                        .0;
+                                    let mut pl = None;
+                                    if let Expr::Var(x) = *var {
+                                        if self
+                                            .tokstream
+                                            .peek()
+                                            .unwrap_or_else(|| panic!("Explicit"))
+                                            .typ
+                                            == TokenTyp::ParenOpen
+                                        {
+                                            self.tokstream.next();
+                                            pl = Some(
+                                                self.parse_expr(0, None, false)
+                                                    .unwrap_or_else(|_| panic!("Explicit"))
+                                                    .0,
+                                            );
+                                            self.expect(TokenTyp::ParenClose, || {
+                                                panic!("Explicit")
+                                            });
+                                        }
+                                        variants.push(Variant {
+                                            name: x,
+                                            payload: pl,
+                                        });
                                         match self
                                             .tokstream
-                                            .next()
+                                            .peek()
                                             .unwrap_or_else(|| panic!("Explicit"))
+                                            .typ
                                         {
-                                            Token {
-                                                typ: Identifier(n), ..
-                                            } => n,
+                                            TokenTyp::Comma => {
+                                                self.tokstream.next();
+                                            }
+                                            TokenTyp::CurlyClose => break,
                                             _ => panic!("Explicit"),
                                         }
-                                    },
-                                    value: {
-                                        self.expect(TokenTyp::Colon, || panic!("Explicit"));
-                                        self.parse_expr(0, None, false)?.0
-                                    },
-                                });
-                                self.expect(TokenTyp::Comma, || panic!("Explicit"));
+                                    } else {
+                                        panic!("Explicit")
+                                    }
+                                }
+                                TokenTyp::CurlyClose => break,
+                                _ => panic!("Explicit"),
                             }
-
-                            self.tokstream.next();
-
-                            (Box::new(Expr::Object(fields)), false)
                         }
-                        _ => (
-                            Box::new(Expr::Scope(
-                                self.parse_block().unwrap_or_else(|_| panic!("Explicit")),
-                            )),
-                            false,
-                        ),
+                        self.tokstream.next();
+                        (Box::new(Expr::Enum(variants)), false)
+                    }
+                    _ => match self.peek_3().unwrap_or_else(|| panic!("Explicit")) {
+                        Token {
+                            typ: TokenTyp::Colon,
+                            ..
+                        } => {
+                            todo!()
+                        }
+                        _ => {
+                            todo!()
+                        }
                     },
                 },
                 Some(Token {
@@ -1169,7 +1216,7 @@ impl<'a> Parser<'a> {
                 Some(Token {
                     typ: TokenTyp::BinOp(op),
                     ..
-                }) if !self.parsing_flag || op != &BinOp::Gt => {
+                }) if !self.parsing_flag || (op != &BinOp::Gt && op != &BinOp::Lt) => {
                     let op = op.clone();
 
                     let (l_bp, r_bp) = self.infix_bp(&op);
@@ -1230,8 +1277,8 @@ impl<'a> Parser<'a> {
 
             BinOp::Eq | BinOp::Neq => (13, 14),
 
-            BinOp::Leq | BinOp::Geq | BinOp::Lt => (15, 16),
-            BinOp::Gt if !self.parsing_flag => (15, 16),
+            BinOp::Leq | BinOp::Geq => (15, 16),
+            BinOp::Lt | BinOp::Gt if !self.parsing_flag => (15, 16),
 
             BinOp::Index => (100, 101),
             _ => panic!("Explicit"),

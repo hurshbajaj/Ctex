@@ -820,7 +820,7 @@ impl Lexer {
             tokStream: vec![],
             idents: HashMap::from([
                 ("asg".to_string(), TokenTyp::Identifier(0)),
-                ("mutable".to_string(), TokenTyp::Identifier(1)),
+                ("mut".to_string(), TokenTyp::Identifier(1)),
                 ("type".to_string(), TokenTyp::Identifier(2)),
                 ("trait".to_string(), TokenTyp::Identifier(3)),
             ]),
