@@ -915,9 +915,12 @@ impl<'a> Parser<'a> {
                         } => {
                             todo!()
                         }
-                        _ => {
-                            todo!()
-                        }
+                        _ => (
+                            Box::new(Expr::Scope(
+                                self.parse_block().unwrap_or_else(|_| panic!("Explicit")),
+                            )),
+                            false,
+                        ),
                     },
                 },
                 Some(Token {

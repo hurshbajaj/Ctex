@@ -1,7 +1,4 @@
-{
-	| Ok( *(%argv[0]) ), 
-	| Err,
-};
+{}
 
 /*
 struct {
@@ -9,13 +6,13 @@ struct {
 	<mut> <u8> age
 };
 
+$ my_enum <asg> {
+	| Ok( *(%argv[0]) ), 
+	| Err,
+};
 
 {
 	name: "Josh",
 	age: 2
-};
-
-{
-	..
 };
 */
