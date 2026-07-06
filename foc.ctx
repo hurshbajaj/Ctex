@@ -1,18 +1,39 @@
-{}
+(1;2);
 
 /*
-struct {
-	<str> name,
-	<mut> <u8> age
+$ my_trait <type: t_fn(nul)> <asg> {
+	return %self.property;
+};
+$ my_second_trait <type: t_fn(nul)> <asg> {
+	return %self.property;
 };
 
-$ my_enum <asg> {
-	| Ok( *(%argv[0]) ), 
-	| Err,
+$ my_trait_unclaimed <type: t_fn(nul)>;
+
+$ my_object <type: my_struct*> <mutable> <asg> {
+	property: 10,425 ,
 };
 
-{
-	name: "Josh",
-	age: 2
+$ %register1 <type: u8> <mutable> <asg> 44;
+$ %register2 <type: u8> <mutable> <asg> 16;
+
+%argv ~> [my_func().conv().check()]; //shorthand for &[..]
+std::printf();
+
+std::printf (conv_int(14, std::data_types::string).check() + 2); //shorthand, automatically sets argv
+
+$ my_enum <type: enum> -> {
+	| SUCCESS(*(%argv[0])), 
+	| FAILURE,
 };
+
+$ my_array <type: array(u8; 2)> -> [1, 1];
+$ my_vector <type: vec(u8)> -> 1::7::[];
+
+$ my_type <type: type> array(u8; 2);
+$ my_array <type: my_type*> <asg> [2, 2];
+
+$ second_arr <type: tuple(u8; 3)> <asg> (1; 2; 3);
+
+$ my_ptr <type: usize> <asg> &my_object; 
 */

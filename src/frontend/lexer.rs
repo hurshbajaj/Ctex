@@ -819,10 +819,19 @@ impl Lexer {
             col: 0,
             tokStream: vec![],
             idents: HashMap::from([
+                // Flags
                 ("asg".to_string(), TokenTyp::Identifier(0)),
                 ("mut".to_string(), TokenTyp::Identifier(1)),
                 ("type".to_string(), TokenTyp::Identifier(2)),
                 ("trait".to_string(), TokenTyp::Identifier(3)),
+                // Reserved
+                ("ictx_T".to_string(), TokenTyp::Register(100)),
+                ("ictx_F".to_string(), TokenTyp::Register(101)),
+                ("octx_T".to_string(), TokenTyp::Register(102)),
+                ("octx_F".to_string(), TokenTyp::Register(103)),
+                ("octx".to_string(), TokenTyp::Register(104)),
+                ("ctx_ffi".to_string(), TokenTyp::Register(105)),
+                ("self".to_string(), TokenTyp::Identifier(106)),
             ]),
             idents_n: 4,
             file_len,
