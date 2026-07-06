@@ -41,6 +41,7 @@ pub fn lookup_keyword(word: &str) -> Option<TokenTyp> {
         "func" => Some(TokenTyp::StaticTyp(StaticTyp::Func)),
         "usize" => Some(TokenTyp::StaticTyp(StaticTyp::Usize)),
         "isize" => Some(TokenTyp::StaticTyp(StaticTyp::Isize)),
+        "alias" => Some(TokenTyp::StaticTyp(StaticTyp::Alias)),
         _ => None,
     }
 }

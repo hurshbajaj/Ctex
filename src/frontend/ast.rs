@@ -175,19 +175,20 @@ pub enum StaticTyp {
     ENTRY,
     INIT,
     Bool,
+    Alias,
 
     // payload
     // single
-    Func, // -> 22
+    Func, // -> 23
     Trait,
     Vector,
 
     //variable-length
-    Tuple, // -> 25
+    Tuple, // -> 26
 
     // special
-    Array,
-    // User Defined: post-ast logic
+    Array, // -> 27
+           // User Defined: post-ast logic
 }
 
 #[derive(Debug)]
@@ -256,8 +257,8 @@ impl<'a> Parser<'a> {
             _marker: PhantomData,
             flag_repr_partition: 1,   // No arg flag
             flag_repr_cap: 3,         // Arg Flag
-            typ_repr_partition: 22,   // for types with single arg payload
-            typ_repr_partition_2: 25, // for types with payloads of variable length
+            typ_repr_partition: 23,   // for types with single arg payload
+            typ_repr_partition_2: 26, // for types with payloads of variable length
             parsing_flag: false,
         }
     }
@@ -958,6 +959,15 @@ impl<'a> Parser<'a> {
                                     {
                                         TokenTyp::Comma => {
                                             self.tokstream.next();
+                                            if self
+                                                .tokstream
+                                                .peek()
+                                                .unwrap_or_else(|| panic!("Explicit"))
+                                                .typ
+                                                == TokenTyp::CurlyClose
+                                            {
+                                                break;
+                                            }
                                         }
                                         TokenTyp::CurlyClose => break,
                                         _ => panic!("Explicit"),
@@ -1227,7 +1237,7 @@ impl<'a> Parser<'a> {
                                             match self.tokstream.peek() {
                                                 Some(
                                                     Token {
-                                                        typ: TokenTyp::Semicolon,
+                                                        typ: TokenTyp::Comma,
                                                         ..
                                                     },
                                                     ..,

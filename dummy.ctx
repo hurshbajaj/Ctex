@@ -44,8 +44,8 @@ $ main <type: ENTRY> {
 
     %octx.some_key -> ..;
 
-    $ my_struct <asg> <trait: [my_trait, my_second_trait]> struct {
-        property: u64,
+    $ my_struct <asg> <trait: [my_trait; my_second_trait]> struct {
+        <u64> prop,
     };
     $ my_trait <type: t_fn(nul)> <asg> {
         return %self.property;
@@ -68,22 +68,22 @@ $ main <type: ENTRY> {
 
     std::printf (conv_int(14, std::data_types::string).check() + 2); //shorthand, automatically sets argv
 
-    $ my_enum <type: enum> -> {
+    $ my_enum <type: enum> <asg> {
         | SUCCESS((%argv[0])?), 
         | FAILURE,
     };
 
-    $ my_array <type: array(u8; 2)> -> [1, 1];
-    $ my_vector <type: vec(u8)> -> 1::7::[];
+    $ my_array <type: array(u8; 2)> <asg> [1; 1];
+    $ my_vector <type: vec(u8)> <asg> 1::7::[];
 
-    $ my_type <type: type> array(u8; 2);
-    $ my_array <type: my_type*> <asg> [2, 2];
+    $ my_type <type: alias> array(u8; 2);
+    $ my_array <type: my_type*> <asg> [2; 2];
 
-    $ second_arr <type: tuple(u8; 3)> <asg> (1, 2, 3);
+    $ second_arr <type: tuple(u8; 3)> <asg> (1; 2; 3);
     
     $ my_ptr <type: usize> <asg> &my_object; 
 
-    if my_arr == second_arr {..};
+    if my_arr = second_arr {..};
 
     $ my_enum_value <type: my_enum(string)*> <asg> my_enum::FAILURE;
     $ unwrapp_example <type: string> <asg> my_enum_value.unwrap_to(my_enum(string)::SUCCESS).check();
