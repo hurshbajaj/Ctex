@@ -13,8 +13,6 @@
 };
 
 $ register_initialization <type: INIT> {
-	$ %ctx_ffi <type: enum> {..};
-
     $ %ictx_F <asg> <type: std::IO> std::IO::protobuf; // input ctx format
     $ %ictx_T <asg> struct { // .. type
         <some_enum*> some_input_field,
@@ -121,7 +119,7 @@ $ my_func <asg> <type: func(Result(u8))> {
     A special command,
     ctexc eval file.ctx --context
 
-    returns an object, from the host language's type system, with all the variables marked by <exposed>
+    returns an object
 
     The normal command to run would be,
     ctexc exec file.ctx --context
@@ -130,7 +128,7 @@ $ my_func <asg> <type: func(Result(u8))> {
 /*
     Reserved Regsters,
     ictx_T; ictx_F; octx_T; octx_F; octx; (expect to be declared and populated before running ENTRY)
-    ctx;
+    ictx;
     argv; 
     self;
 	core_signature;

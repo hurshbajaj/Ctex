@@ -2,4 +2,28 @@
 	- Enums
 	- Error System
 
+[Errors]
+	- Panic Mode for Topmost
+	- Handling Error Tokens
+	- Phrase Level Recovery / Error Productions
+
+	- Fatal (Crash) / Extant (Preserve the Error)
+	- Pass in a span + "flt" variant (often a discriminated union), further allows attatching info/hint as well as change spans, for lints, allows for changing severity
+	- Assembly at error_printing time, after refining for duplicates
+	- Error Entries -> Parent Struct to reduce locks
+	- Use hashing to filter dupicates
+
+	- Error: DiagCtxHandle, E_Metadata
+	- E_Metadata: Level, grace?, message (returned by flt::), error code(returned by flt::), span (multi span),
+	  children (info/hint), args for flt
+
 [Error System]
+	- (Level) Errors (Hardcoded) vs lints/warnings (allow, warn, deny)
+	- Lints (Types) : Lint | Grace Lint
+	- Format
+	- Use Ftl
+	- readability of messages
+	- additional info/hint
+	- highlighted code blocks
+	- "Allow thing-not-concept"
+
