@@ -6,21 +6,21 @@ use std::collections::HashMap;
 use std::fs::File;
 
 pub struct Lexer {
-    pub mmap: [Mmap; 2],
-    chunk_off: [usize; 2],
+    pub mmap: [Mmap; 2],   //ping-pong buf
+    chunk_off: [usize; 2], //mmap "map" (pun intended)
     pub file: File,
     pub file_at: usize,
-    pub buf_n: usize,
-    pub mmap_active: u8,
+    pub buf_n: usize,    // single-buf size
+    pub mmap_active: u8, // active-mmap index
     pub i: *const u8,
     pub row: usize,
     pub col: usize,
     pub tokStream: Vec<Option<Token>>,
-    pub idents: HashMap<String, TokenTyp>,
-    pub idents_n: usize,
+    pub idents: HashMap<String, TokenTyp>, // ident-interning
+    pub idents_n: usize,                   // ident-interning helper
     file_len: usize,
     pos: usize,
-    linear: bool,
+    linear: bool, // file size
 }
 
 impl Lexer {
@@ -830,8 +830,7 @@ impl Lexer {
                 ("octx_T".to_string(), TokenTyp::Register(102)),
                 ("octx_F".to_string(), TokenTyp::Register(103)),
                 ("octx".to_string(), TokenTyp::Register(104)),
-                ("ctx_ffi".to_string(), TokenTyp::Register(105)),
-                ("self".to_string(), TokenTyp::Identifier(106)),
+                ("self".to_string(), TokenTyp::Identifier(105)),
             ]),
             idents_n: 4,
             file_len,

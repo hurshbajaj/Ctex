@@ -125,7 +125,7 @@ src/
 
 ## 📝 Author's Note
 
-I'd like to start off by clarifying that the emojis comments throughout are very much intended. Apart from rare debugging on small, isolated, fragmented bits, and refining this very README I have made it a point not to use or rely on AI throughout the development of the project. Certainly never on whole files or big chunks. The architectural design, register model, experimental paradigm, and performance optimizations are, I assure you, my very own.
+I'd like to start off by clarifying that the emojis / comments throughout are very much intended. Apart from rare debugging on small, isolated, fragmented bits, and refining this very README I have made it a point not to use or rely on AI throughout the development of the project. Certainly never on whole files or big chunks. The architectural design, register model, experimental paradigm, and performance optimizations are, I assure you, my very own.
 
 — **Hursh B**
 

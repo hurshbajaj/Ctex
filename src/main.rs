@@ -59,7 +59,6 @@ fn main() {
         let ast = Parser.from_ast();
 
         let elapsed1 = t1.elapsed();
-        println!("ast: {:.3?}", elapsed1);
         if dump {
             println!("\n----------------------------------------");
             println!("Abstract Syntax Tree");

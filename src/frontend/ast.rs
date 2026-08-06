@@ -13,6 +13,7 @@ pub struct TokStream {
 }
 
 impl TokStream {
+    //single peek
     pub fn peek(&self) -> Option<&Token> {
         self.tokens.get(self.cursor).and_then(|tok| tok.as_ref())
     }
@@ -30,7 +31,7 @@ impl TokStream {
 
 pub struct Parser<'a> {
     tokstream: TokStream,
-    _marker: PhantomData<&'a ()>,
+    _marker: PhantomData<&'a ()>, // lifetime fuckery
 
     flag_repr_partition: usize,
     flag_repr_cap: usize,
@@ -262,6 +263,7 @@ impl<'a> Parser<'a> {
             parsing_flag: false,
         }
     }
+    // Root
     pub fn from_ast(&mut self) -> Stmt<'a> {
         let mut ast = vec![];
         while let Some(_) = self.tokstream.peek() {
@@ -284,6 +286,7 @@ impl<'a> Parser<'a> {
     }
     fn parse_stmt(&mut self) -> Result<Box<Stmt<'a>>, ()> {
         match self.tokstream.peek() {
+            // ~ %regX;
             Some(Token {
                 typ: TokenTyp::Squig,
                 ..
@@ -310,6 +313,7 @@ impl<'a> Parser<'a> {
                 self.expect(TokenTyp::Semicolon, || panic!("Explicit"));
                 Ok(stmt)
             }
+            // NOT standard bin-op
             Some(Token {
                 typ: TokenTyp::BinOp(BinOp::Lt),
                 ..
@@ -318,9 +322,9 @@ impl<'a> Parser<'a> {
                 self.tokstream.next();
                 match self.tokstream.peek() {
                     Some(Token {
-                        typ: TokenTyp::Identifier(n),
+                        typ: TokenTyp::Identifier(n), // n: interned (See [Lexer])
                         ..
-                    }) if n <= &self.flag_repr_partition => {
+                    }) /*No Payload*/ if n <= &self.flag_repr_partition => {
                         let flag = unsafe { std::mem::transmute::<u8, Flg>(n.to_owned() as u8) };
                         self.tokstream.next();
                         self.expect(TokenTyp::BinOp(BinOp::Gt), || panic!("Explicit"));
