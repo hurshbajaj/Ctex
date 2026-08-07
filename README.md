@@ -7,43 +7,43 @@
 
 ## 📌 Overview
 
-**CTEX** (short for *context*) is an embedded, high-performance systems and configuration language designed to turn static settings into active, contextual execution surfaces.
+**CTEX** (short for *context*) is an embedded, high-performance systems and configuration language that aims to turn static settings into active, contextual execution surfaces.
 
-Traditional configuration formats like TOML or YAML force you to specify static constants. CTEX takes a fundamentally different approach:
+Traditional configuration formats like TOML or YAML force you to specify static constants. CTEX takes a fundamentally different approach~
 
 1. **Host-Exposed API:** CTEX sits directly alongside host application source code, doubling as both a runtime config engine and a lightweight plugin system.
 2. **Context-Driven Computation:** Instead of static values, a `.ctx` program takes an input context (`%ictx`), performs computation in real time on it, and yields a computed output context (`%octx`).
-3. **Low-Level Native Integration:** Designed with explicit memory layout handling in mind, CTEX is projected to work natively with Protobuf, raw bytes, or raw host-defined struct layouts (ideal for low-level interaction with languages like C that allow flexible byte-to-struct mapping via explicit interfaces).
+3. **Low-Level Native Integration:** Designed with explicit _memory layout_ handling in mind, CTEX is projected to work natively with Protobuf, raw bytes, or raw host-defined struct layouts (ideal for low-level interaction with languages like C that allow flexible byte-to-struct mapping via explicit interfaces).
 
 Because CTEX compiles right alongside the host source, performance is paramount. Currently, it features a custom **mmap-backed, SIMD-accelerated lexer** and a recursive-descent parser capable of scanning nearly a million tokens in tens of milliseconds.
 
 ---
 
-## 🛠️ Key Architectural Concepts
+## 🛠️ Architectural Overview
 
 ### Top-Level Forms
-CTEX programs rely on two special top-level constructs:
-* **`INIT` (Optional):** Configures the I/O contract, payload formats, struct schemas, and core signatures before anything executes.
-* **`ENTRY` (Required):** The core execution body containing program logic and context mutations.
+CTEX programs rely on two primray top-level constructs:
+* **`INIT` (Optional):** For setting up the I/O contract: payload formats, struct schemas, core signatures and so on and so forth. These must be preconfigured before execution reaching ENTRY.
+* **`ENTRY`:** As the name suggests, the program entry point.
 
-### The Register Model & Calling Conventions
-Rather than standard parameter passing, CTEX operates on explicit registers:
-* **`%ictx` / `%octx`**: Live input context and output context buffers. Mutate `%octx` throughout execution to define what is ultimately returned to the host.
+### Reserved Registers
+Rather than relying on the standard parameter/argument model, CTEX follows a niche, yet highly accommodating of an ideology, employing registers, following which, it claims certain identifiers as _reserved_ registers:
+* **`%ictx` / `%octx`**: Input/Output "Context" Buffer Registers. `%ictx` holds the initial data that is passed to the CTEX program as context, while `%octx` is the register, intended to be mutated throughout the length of the program and eventually returned to the host language.
 * **`%ictx_F` / `%octx_F`**: Format definitions (e.g., Protobuf, raw bytes, or custom host byte stream layouts).
-* **`%ictx_T` / `%octx_T`**: The structural schema that payload blobs adhere to.
-* **`%argv` / `%retv`**: Default argument and return channels.
-  * Passing arguments via `fn(xyz)` is shorthand for pushing `xyz` into `%argv`.
-  * `return xyz` stores `xyz` directly into `%retv`.
+* **`%ictx_T` / `%octx_T`**: Schemas for `%ictz` / `%octx` respectively.
+* **`%argv` / `%retv`**: Default argument and return register channels.
+  * Passing arguments via `fn(xyz)` is only shorthand for pushing `xyz` into `%argv` and subsequently running the function denoted by `fn`.
+  * `return xyz`, apart from returning the value at hand, pushes `xyz` into `%retv`.
 
 ### Execution Modes
 * **Standard Mode:** Executes alongside standard host I/O.
-* **Isolated Mode:** Blocks host `stdio` immediately after acquiring `%ictx`, isolating standard I/O streams until `%octx` is fully computed and emitted back through the host channel.
+* **Isolated Mode:** Blocks host `stdio` immediately after populating `%ictx`, only unblocking it to reemit `%octx` at the end of the program.
 
 ---
 
 ## ⚡ Performance Benchmarks
 
-CTEX frontend timing (Release build, `lex` + `parse` only):
+CTEX - Tokenization + AST GEN (Release Build):
 
 | Input File / Scale | Tokens | Lexer (mmap + SIMD) | Parser (AST) |
 | :--- | :--- | :--- | :--- |
@@ -55,9 +55,9 @@ CTEX frontend timing (Release build, `lex` + `parse` only):
 
 ## 💻 Installation & Dependencies
 
-### 1. Install Rust Toolchain
+### 1. Installing the Rust Toolchain
 
-CTEX requires a recent Rust toolchain (**Edition 2024**). You can install Rust using `rustup`:
+CTEX requires a recent Rust toolchain, namely (**Edition 2024**), which can be installed using `rustup`:
 
 ```bash
 # Install rustup (Linux / macOS)
@@ -73,7 +73,7 @@ rustup update
 
 _(On Windows, download and run `rustup-init.exe` from [rustup.rs](https://rustup.rs/).)_
 
-### 2. Fetch Dependencies & Build
+### 2. Fetching Dependencies + Build
 
 All Rust crate dependencies (`memmap2`, `wide`, `display_tree`) are fetched automatically by Cargo upon build.
 
@@ -108,8 +108,6 @@ cargo run --release -- --dump foc.ctx
 ```
 
 ## 📁 Repository Layout
-
-Plaintext
 
 ```
 src/
